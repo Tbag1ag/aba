@@ -75,9 +75,12 @@ export default function App() {
       if (searchQuery) params.append("search", searchQuery);
       
       const res = await fetch(`/api/quotes?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
       const data = await res.json();
       setQuotes(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to fetch quotes", err);
     }
   };
@@ -85,10 +88,19 @@ export default function App() {
   const fetchCategories = async () => {
     try {
       const res = await fetch("/api/categories");
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
       const data = await res.json();
-      setCategories(data);
-    } catch (err) {
+      console.log("Fetched categories:", data);
+      if (Array.isArray(data)) {
+        setCategories(data);
+      } else {
+        console.error("Categories data is not an array", data);
+      }
+    } catch (err: any) {
       console.error("Failed to fetch categories", err);
+      alert(`无法加载分类: ${err.message}`);
     }
   };
 
@@ -131,19 +143,27 @@ export default function App() {
 
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCategoryName.trim()) return;
+    const name = newCategoryName.trim();
+    if (!name) return;
+    
     try {
       const res = await fetch("/api/categories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newCategoryName }),
+        body: JSON.stringify({ name }),
       });
+      
       if (res.ok) {
         setNewCategoryName("");
         fetchCategories();
+        // Optional: exit management mode or stay? Let's stay but give feedback
+      } else {
+        const data = await res.json();
+        alert(`创建分类失败: ${data.error || "该分类可能已存在"}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to add category", err);
+      alert(`网络错误: ${err.message}`);
     }
   };
 
@@ -308,12 +328,14 @@ export default function App() {
                     <button 
                       onClick={() => setIsManagingCategories(!isManagingCategories)}
                       className={cn(
-                        "p-1 rounded transition-colors",
-                        isManagingCategories ? "bg-[#5A5A40] text-white" : "hover:bg-[#f9f8f4] text-[#5A5A40]"
+                        "flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-all",
+                        isManagingCategories 
+                          ? "bg-amber-100 text-amber-700 border border-amber-200" 
+                          : "bg-[#f9f8f4] text-[#5A5A40] border border-[#e6e2d3] hover:bg-[#e6e2d3]"
                       )}
-                      title={isManagingCategories ? "退出管理" : "管理分类"}
                     >
-                      <Settings2 size={14} />
+                      <Settings2 size={12} />
+                      {isManagingCategories ? "完成" : "管理"}
                     </button>
                   </div>
 
@@ -331,19 +353,26 @@ export default function App() {
                       全部笔记
                     </button>
                     
+                    {categories.length === 0 && !isManagingCategories && (
+                      <div className="px-4 py-8 text-center opacity-40">
+                        <FolderOpen size={24} className="mx-auto mb-2" />
+                        <p className="text-xs italic">暂无分类</p>
+                      </div>
+                    )}
+
                     {categories.map(cat => (
                       <div key={cat.id} className="group flex items-center gap-1">
                         <button
                           onClick={() => setSelectedCategory(cat.name)}
                           className={cn(
-                            "flex-1 flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all capitalize",
+                            "flex-1 flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all capitalize truncate",
                             selectedCategory === cat.name 
                               ? "bg-[#5A5A40] text-white shadow-md" 
                               : "text-[#4a4a4a] hover:bg-[#f9f8f4]"
                           )}
                         >
-                          <Hash size={16} className="opacity-60" />
-                          {cat.name}
+                          <Hash size={16} className="opacity-60 shrink-0" />
+                          <span className="truncate">{cat.name}</span>
                         </button>
                         {isManagingCategories && cat.name !== "未分类" && (
                           <button 
@@ -351,7 +380,7 @@ export default function App() {
                               e.stopPropagation();
                               handleDeleteCategory(cat.id, cat.name);
                             }}
-                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors z-10"
+                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
                             title="删除分类"
                           >
                             <Trash2 size={14} />
@@ -362,20 +391,32 @@ export default function App() {
                   </div>
 
                   {isManagingCategories && (
-                    <form onSubmit={handleAddCategory} className="mt-4 flex gap-2">
-                      <input 
-                        type="text"
-                        placeholder="新分类..."
-                        value={newCategoryName}
-                        onChange={(e) => setNewCategoryName(e.target.value)}
-                        className="flex-1 bg-[#f9f8f4] border-none rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-[#5A5A40]"
-                      />
-                      <button 
-                        type="submit"
-                        className="p-1.5 bg-[#5A5A40] text-white rounded-lg hover:bg-[#4a4a34]"
-                      >
-                        <Plus size={14} />
-                      </button>
+                    <form onSubmit={handleAddCategory} className="mt-6 p-3 bg-white rounded-2xl border border-dashed border-[#e6e2d3] space-y-3">
+                      <div className="flex items-center justify-between px-1">
+                        <div className="text-[10px] font-bold uppercase text-[#8e8e7e]">新增分类</div>
+                        <button 
+                          type="button"
+                          onClick={() => setIsManagingCategories(false)}
+                          className="text-[10px] text-[#8e8e7e] hover:text-[#2c2c2c]"
+                        >
+                          取消
+                        </button>
+                      </div>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text"
+                          placeholder="输入分类名称..."
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                          className="flex-1 bg-[#f9f8f4] border-none rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-[#5A5A40]"
+                        />
+                        <button 
+                          type="submit"
+                          className="p-2 bg-[#5A5A40] text-white rounded-lg hover:bg-[#4a4a34] transition-all active:scale-95"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
                     </form>
                   )}
                 </div>
