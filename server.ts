@@ -10,10 +10,23 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const sql = neon(process.env.DATABASE_URL!);
+const DATABASE_URL = process.env.DATABASE_URL;
+
+function getSql() {
+  if (!DATABASE_URL) {
+    throw new Error("环境变量 DATABASE_URL 未设置。请在设置中添加您的 Neon 数据库连接字符串。");
+  }
+  return neon(DATABASE_URL);
+}
 
 async function initDb() {
+  if (!DATABASE_URL) {
+    console.warn("DATABASE_URL is missing. Skipping database initialization.");
+    return;
+  }
+  
   try {
+    const sql = getSql();
     console.log("Initializing Neon database...");
     
     // Create tables
@@ -71,6 +84,7 @@ async function startServer() {
   // API Routes
   app.get("/api/quotes", async (req, res) => {
     try {
+      const sql = getSql();
       const { category, search } = req.query;
       
       let quotes;
@@ -111,6 +125,7 @@ async function startServer() {
 
   app.get("/api/categories", async (req, res) => {
     try {
+      const sql = getSql();
       const categories = await sql`SELECT * FROM categories ORDER BY id ASC`;
       res.json(categories);
     } catch (err: any) {
@@ -123,6 +138,7 @@ async function startServer() {
     const { name } = req.body;
     console.log(`Attempting to add category: "${name}"`);
     try {
+      const sql = getSql();
       if (!name || typeof name !== 'string') {
         return res.status(400).json({ error: "分类名称无效" });
       }
@@ -136,6 +152,7 @@ async function startServer() {
 
   app.delete("/api/categories/:id", async (req, res) => {
     try {
+      const sql = getSql();
       const { id } = req.params;
       const category = await sql`SELECT name FROM categories WHERE id = ${id}`;
       if (category.length > 0) {
@@ -151,6 +168,7 @@ async function startServer() {
 
   app.post("/api/quotes", async (req, res) => {
     try {
+      const sql = getSql();
       const { title, content, author, comment, category, is_pinned } = req.body;
       const result = await sql`
         INSERT INTO quotes (title, content, author, comment, category, is_pinned) 
@@ -166,6 +184,7 @@ async function startServer() {
 
   app.put("/api/quotes/:id", async (req, res) => {
     try {
+      const sql = getSql();
       const { id } = req.params;
       const { title, content, author, comment, category, is_pinned } = req.body;
       await sql`
@@ -182,6 +201,7 @@ async function startServer() {
 
   app.delete("/api/quotes/:id", async (req, res) => {
     try {
+      const sql = getSql();
       const { id } = req.params;
       await sql`DELETE FROM quotes WHERE id = ${id}`;
       res.json({ success: true });
