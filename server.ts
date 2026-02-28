@@ -19,10 +19,12 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS quotes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT,
     content TEXT NOT NULL,
     author TEXT,
     comment TEXT,
     category TEXT DEFAULT '未分类',
+    is_pinned INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -30,12 +32,20 @@ db.exec(`
   INSERT OR IGNORE INTO categories (name) VALUES ('读书心得'), ('金句摘抄'), ('灵感随笔'), ('未分类');
 `);
 
-// Add title column if it doesn't exist (migration)
+// Ensure default categories exist
+const count = db.prepare("SELECT COUNT(*) as count FROM categories").get() as any;
+if (count.count === 0) {
+  const insert = db.prepare("INSERT INTO categories (name) VALUES (?)");
+  ['读书心得', '金句摘抄', '灵感随笔', '未分类'].forEach(name => insert.run(name));
+}
+
+// Add title and is_pinned columns if they don't exist (migration)
 try {
   db.prepare("ALTER TABLE quotes ADD COLUMN title TEXT").run();
-} catch (e) {
-  // Column might already exist
-}
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE quotes ADD COLUMN is_pinned INTEGER DEFAULT 0").run();
+} catch (e) {}
 
 async function startServer() {
   const app = express();
@@ -60,7 +70,7 @@ async function startServer() {
       params.push(searchParam, searchParam, searchParam, searchParam);
     }
     
-    query += " ORDER BY created_at DESC";
+    query += " ORDER BY is_pinned DESC, created_at DESC";
     const quotes = db.prepare(query).all(...params);
     res.json(quotes);
   });
@@ -92,15 +102,15 @@ async function startServer() {
   });
 
   app.post("/api/quotes", (req, res) => {
-    const { title, content, author, comment, category } = req.body;
-    const info = db.prepare("INSERT INTO quotes (title, content, author, comment, category) VALUES (?, ?, ?, ?, ?)").run(title || '', content, author, comment, category || '未分类');
-    res.json({ id: info.lastInsertRowid, title, content, author, comment, category });
+    const { title, content, author, comment, category, is_pinned } = req.body;
+    const info = db.prepare("INSERT INTO quotes (title, content, author, comment, category, is_pinned) VALUES (?, ?, ?, ?, ?, ?)").run(title || '', content, author, comment, category || '未分类', is_pinned ? 1 : 0);
+    res.json({ id: info.lastInsertRowid, title, content, author, comment, category, is_pinned: !!is_pinned });
   });
 
   app.put("/api/quotes/:id", (req, res) => {
     const { id } = req.params;
-    const { title, content, author, comment, category } = req.body;
-    db.prepare("UPDATE quotes SET title = ?, content = ?, author = ?, comment = ?, category = ? WHERE id = ?").run(title, content, author, comment, category, id);
+    const { title, content, author, comment, category, is_pinned } = req.body;
+    db.prepare("UPDATE quotes SET title = ?, content = ?, author = ?, comment = ?, category = ?, is_pinned = ? WHERE id = ?").run(title, content, author, comment, category, is_pinned ? 1 : 0, id);
     res.json({ success: true });
   });
 

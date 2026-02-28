@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { 
+  Pin,
+  PinOff,
   Plus, 
   Trash2, 
   MessageSquare, 
@@ -33,6 +35,7 @@ interface Quote {
   author: string;
   comment: string;
   category: string;
+  is_pinned: boolean;
   created_at: string;
 }
 
@@ -47,9 +50,9 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>("全部");
   const [searchQuery, setSearchQuery] = useState("");
   const [isAdding, setIsAdding] = useState(false);
-  const [newQuote, setNewQuote] = useState({ title: "", content: "", author: "", comment: "", category: "未分类" });
+  const [newQuote, setNewQuote] = useState({ title: "", content: "", author: "", comment: "", category: "未分类", is_pinned: false });
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ title: "", content: "", author: "", comment: "", category: "" });
+  const [editForm, setEditForm] = useState({ title: "", content: "", author: "", comment: "", category: "", is_pinned: false });
   const [selectedQuoteId, setSelectedQuoteId] = useState<number | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isManagingCategories, setIsManagingCategories] = useState(false);
@@ -59,8 +62,11 @@ export default function App() {
 
   useEffect(() => {
     fetchQuotes();
-    fetchCategories();
   }, [selectedCategory, searchQuery]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
   const fetchQuotes = async () => {
     try {
@@ -88,7 +94,10 @@ export default function App() {
 
   const handleAddQuote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newQuote.content.trim()) return;
+    if (!newQuote.content.trim()) {
+      alert("内容不能为空");
+      return;
+    }
 
     try {
       const res = await fetch("/api/quotes", {
@@ -98,13 +107,17 @@ export default function App() {
       });
       if (res.ok) {
         const added = await res.json();
-        setNewQuote({ title: "", content: "", author: "", comment: "", category: "未分类" });
+        setNewQuote({ title: "", content: "", author: "", comment: "", category: "未分类", is_pinned: false });
         setIsAdding(false);
         fetchQuotes();
         setSelectedQuoteId(added.id);
+      } else {
+        const errorData = await res.json();
+        alert(`保存失败: ${errorData.error || "未知错误"}`);
       }
     } catch (err) {
       console.error("Failed to add quote", err);
+      alert("网络错误，保存失败");
     }
   };
 
@@ -168,6 +181,21 @@ export default function App() {
     }
   };
 
+  const handleTogglePin = async (quote: Quote) => {
+    try {
+      const updatedQuote = { ...quote, is_pinned: !quote.is_pinned };
+      const res = await fetch(`/api/quotes/${quote.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedQuote),
+      });
+      if (res.ok) {
+        fetchQuotes();
+      }
+    } catch (err) {
+      console.error("Failed to toggle pin", err);
+    }
+  };
   const handleUpdate = async (id: number) => {
     try {
       const res = await fetch(`/api/quotes/${id}`, {
@@ -178,9 +206,13 @@ export default function App() {
       if (res.ok) {
         setEditingId(null);
         fetchQuotes();
+      } else {
+        const errorData = await res.json();
+        alert(`更新失败: ${errorData.error || "未知错误"}`);
       }
     } catch (err) {
       console.error("Failed to update quote", err);
+      alert("网络错误，更新失败");
     }
   };
 
@@ -239,12 +271,21 @@ export default function App() {
         {/* Left Sidebar - Categories */}
         <AnimatePresence>
           {isSidebarOpen && (
-            <motion.nav
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 260, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              className="bg-[#fdfcf9] border-r border-[#e6e2d3] overflow-y-auto hidden md:block"
-            >
+            <>
+              {/* Mobile Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsSidebarOpen(false)}
+                className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden"
+              />
+              <motion.nav
+                initial={{ x: -260, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: -260, opacity: 0 }}
+                className="bg-[#fdfcf9] border-r border-[#e6e2d3] overflow-y-auto fixed inset-y-0 left-0 z-40 w-[260px] md:relative md:z-10"
+              >
               <div className="p-6 space-y-8">
                 <div>
                   <div className="flex items-center justify-between mb-4">
@@ -325,8 +366,9 @@ export default function App() {
                 </div>
               </div>
             </motion.nav>
-          )}
-        </AnimatePresence>
+          </>
+        )}
+      </AnimatePresence>
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto px-6 py-12 scroll-smooth">
@@ -379,9 +421,13 @@ export default function App() {
                           onChange={e => setNewQuote({ ...newQuote, category: e.target.value })}
                           className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 focus:ring-2 focus:ring-[#5A5A40]/20 appearance-none"
                         >
-                          {categories.map(cat => (
-                            <option key={cat.id} value={cat.name}>{cat.name}</option>
-                          ))}
+                          {categories.length > 0 ? (
+                            categories.map(cat => (
+                              <option key={cat.id} value={cat.name}>{cat.name}</option>
+                            ))
+                          ) : (
+                            <option value="未分类">未分类</option>
+                          )}
                         </select>
                       </div>
                       <div>
@@ -395,7 +441,22 @@ export default function App() {
                         />
                       </div>
                     </div>
-                    <div className="flex justify-end">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <div 
+                          onClick={() => setNewQuote({ ...newQuote, is_pinned: !newQuote.is_pinned })}
+                          className={cn(
+                            "w-10 h-5 rounded-full transition-colors relative",
+                            newQuote.is_pinned ? "bg-[#5A5A40]" : "bg-[#e6e2d3]"
+                          )}
+                        >
+                          <div className={cn(
+                            "absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform",
+                            newQuote.is_pinned ? "translate-x-5" : "translate-x-0"
+                          )} />
+                        </div>
+                        <span className="text-xs font-semibold text-[#8e8e7e] uppercase tracking-widest">置顶此笔记</span>
+                      </label>
                       <button
                         type="submit"
                         className="bg-[#5A5A40] text-white px-8 py-3 rounded-full font-medium hover:bg-[#4a4a34] transition-colors shadow-lg"
@@ -486,28 +547,50 @@ export default function App() {
                                   onChange={e => setEditForm({ ...editForm, category: e.target.value })}
                                   className="w-full bg-[#f9f8f4] border-none rounded-lg p-2 text-sm"
                                 >
-                                  {categories.map(cat => (
-                                    <option key={cat.id} value={cat.name}>{cat.name}</option>
-                                  ))}
+                                  {categories.length > 0 ? (
+                                    categories.map(cat => (
+                                      <option key={cat.id} value={cat.name}>{cat.name}</option>
+                                    ))
+                                  ) : (
+                                    <option value="未分类">未分类</option>
+                                  )}
                                 </select>
                               </div>
-                              <div className="flex justify-end gap-2">
-                                <button onClick={() => setEditingId(null)} className="px-4 py-2 text-sm">取消</button>
-                                <button 
-                                  onClick={() => handleUpdate(quote.id)}
-                                  className="bg-[#5A5A40] text-white px-4 py-2 rounded-full text-sm flex items-center gap-2"
-                                >
-                                  <Save size={14} /> 保存
-                                </button>
+                              <div className="flex items-center justify-between mt-2">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={editForm.is_pinned}
+                                    onChange={e => setEditForm({ ...editForm, is_pinned: e.target.checked })}
+                                    className="w-4 h-4 rounded border-[#e6e2d3] text-[#5A5A40] focus:ring-[#5A5A40]"
+                                  />
+                                  <span className="text-xs font-semibold text-[#8e8e7e] uppercase tracking-widest">置顶此笔记</span>
+                                </label>
+                                <div className="flex gap-2">
+                                  <button onClick={() => setEditingId(null)} className="px-4 py-2 text-sm">取消</button>
+                                  <button 
+                                    onClick={() => handleUpdate(quote.id)}
+                                    className="bg-[#5A5A40] text-white px-4 py-2 rounded-full text-sm flex items-center gap-2"
+                                  >
+                                    <Save size={14} /> 保存
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ) : (
                             <div className="relative">
                               <QuoteIcon className="absolute -top-4 -left-4 text-[#5A5A40]/10" size={40} />
                               <div className="mb-3 flex items-center justify-between">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] bg-[#5A5A40]/10 px-2 py-0.5 rounded">
-                                  {quote.category}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] bg-[#5A5A40]/10 px-2 py-0.5 rounded">
+                                    {quote.category}
+                                  </span>
+                                  {quote.is_pinned && (
+                                    <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+                                      <Pin size={10} /> 置顶
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="md:hidden text-[10px] text-[#8e8e7e] font-medium">
                                   {date.month} {date.day}, {date.year}
                                 </span>
@@ -529,8 +612,21 @@ export default function App() {
                                   <button 
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      handleTogglePin(quote);
+                                    }}
+                                    className={cn(
+                                      "p-2 hover:bg-[#f9f8f4] rounded-full transition-colors",
+                                      quote.is_pinned ? "text-amber-500" : "text-[#8e8e7e] hover:text-[#5A5A40]"
+                                    )}
+                                    title={quote.is_pinned ? "取消置顶" : "置顶"}
+                                  >
+                                    {quote.is_pinned ? <PinOff size={18} /> : <Pin size={18} />}
+                                  </button>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       setEditingId(quote.id);
-                                      setEditForm({ title: quote.title, content: quote.content, author: quote.author, comment: quote.comment, category: quote.category });
+                                      setEditForm({ title: quote.title, content: quote.content, author: quote.author, comment: quote.comment, category: quote.category, is_pinned: quote.is_pinned });
                                     }}
                                     className="p-2 hover:bg-[#f9f8f4] rounded-full text-[#8e8e7e] hover:text-[#5A5A40] transition-colors"
                                     title="编辑"
@@ -614,7 +710,7 @@ export default function App() {
                       <button 
                         onClick={() => {
                           setEditingId(selectedQuote.id);
-                          setEditForm({ title: selectedQuote.title, content: selectedQuote.content, author: selectedQuote.author, comment: selectedQuote.comment, category: selectedQuote.category });
+                          setEditForm({ title: selectedQuote.title, content: selectedQuote.content, author: selectedQuote.author, comment: selectedQuote.comment, category: selectedQuote.category, is_pinned: selectedQuote.is_pinned });
                         }}
                         className="flex items-center gap-1 text-[10px] text-[#5A5A40] hover:underline font-bold"
                       >
@@ -655,7 +751,7 @@ export default function App() {
                             <button 
                               onClick={() => {
                                 setEditingId(selectedQuote.id);
-                                setEditForm({ title: selectedQuote.title, content: selectedQuote.content, author: selectedQuote.author, comment: selectedQuote.comment, category: selectedQuote.category });
+                                setEditForm({ title: selectedQuote.title, content: selectedQuote.content, author: selectedQuote.author, comment: selectedQuote.comment, category: selectedQuote.category, is_pinned: selectedQuote.is_pinned });
                               }}
                               className="text-xs text-[#5A5A40] border border-[#5A5A40]/20 px-4 py-2 rounded-full hover:bg-[#5A5A40] hover:text-white transition-all"
                             >
