@@ -55,29 +55,39 @@ async function startServer() {
 
   // API Routes
   app.get("/api/quotes", (req, res) => {
-    const { category, search } = req.query;
-    let query = "SELECT * FROM quotes WHERE 1=1";
-    const params: any[] = [];
-    
-    if (category && category !== '全部') {
-      query += " AND category = ?";
-      params.push(category);
-    }
+    try {
+      const { category, search } = req.query;
+      let query = "SELECT * FROM quotes WHERE 1=1";
+      const params: any[] = [];
+      
+      if (category && category !== '全部') {
+        query += " AND category = ?";
+        params.push(category);
+      }
 
-    if (search) {
-      query += " AND (title LIKE ? OR content LIKE ? OR author LIKE ? OR comment LIKE ?)";
-      const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam, searchParam, searchParam);
+      if (search) {
+        query += " AND (title LIKE ? OR content LIKE ? OR author LIKE ? OR comment LIKE ?)";
+        const searchParam = `%${search}%`;
+        params.push(searchParam, searchParam, searchParam, searchParam);
+      }
+      
+      query += " ORDER BY is_pinned DESC, created_at DESC";
+      const quotes = db.prepare(query).all(...params);
+      res.json(quotes);
+    } catch (err: any) {
+      console.error("Error fetching quotes:", err);
+      res.status(500).json({ error: err.message });
     }
-    
-    query += " ORDER BY is_pinned DESC, created_at DESC";
-    const quotes = db.prepare(query).all(...params);
-    res.json(quotes);
   });
 
   app.get("/api/categories", (req, res) => {
-    const categories = db.prepare("SELECT * FROM categories ORDER BY id ASC").all();
-    res.json(categories);
+    try {
+      const categories = db.prepare("SELECT * FROM categories ORDER BY id ASC").all();
+      res.json(categories);
+    } catch (err: any) {
+      console.error("Error fetching categories:", err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   app.post("/api/categories", (req, res) => {
@@ -85,39 +95,74 @@ async function startServer() {
     try {
       const info = db.prepare("INSERT INTO categories (name) VALUES (?)").run(name);
       res.json({ id: info.lastInsertRowid, name });
-    } catch (err) {
-      res.status(400).json({ error: "Category already exists" });
+    } catch (err: any) {
+      console.error("Error adding category:", err);
+      res.status(400).json({ error: err.message || "Category already exists" });
     }
   });
 
   app.delete("/api/categories/:id", (req, res) => {
-    const { id } = req.params;
-    // Optional: Update quotes in this category to '未分类'
-    const category = db.prepare("SELECT name FROM categories WHERE id = ?").get(id) as any;
-    if (category) {
-      db.prepare("UPDATE quotes SET category = '未分类' WHERE category = ?").run(category.name);
+    try {
+      const { id } = req.params;
+      const category = db.prepare("SELECT name FROM categories WHERE id = ?").get(id) as any;
+      if (category) {
+        db.prepare("UPDATE quotes SET category = '未分类' WHERE category = ?").run(category.name);
+      }
+      db.prepare("DELETE FROM categories WHERE id = ?").run(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Error deleting category:", err);
+      res.status(500).json({ error: err.message });
     }
-    db.prepare("DELETE FROM categories WHERE id = ?").run(id);
-    res.json({ success: true });
   });
 
   app.post("/api/quotes", (req, res) => {
-    const { title, content, author, comment, category, is_pinned } = req.body;
-    const info = db.prepare("INSERT INTO quotes (title, content, author, comment, category, is_pinned) VALUES (?, ?, ?, ?, ?, ?)").run(title || '', content, author, comment, category || '未分类', is_pinned ? 1 : 0);
-    res.json({ id: info.lastInsertRowid, title, content, author, comment, category, is_pinned: !!is_pinned });
+    try {
+      const { title, content, author, comment, category, is_pinned } = req.body;
+      const info = db.prepare("INSERT INTO quotes (title, content, author, comment, category, is_pinned) VALUES (?, ?, ?, ?, ?, ?)").run(
+        title || '', 
+        content, 
+        author || '', 
+        comment || '', 
+        category || '未分类', 
+        is_pinned ? 1 : 0
+      );
+      res.json({ id: info.lastInsertRowid, title, content, author, comment, category, is_pinned: !!is_pinned });
+    } catch (err: any) {
+      console.error("Error adding quote:", err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   app.put("/api/quotes/:id", (req, res) => {
-    const { id } = req.params;
-    const { title, content, author, comment, category, is_pinned } = req.body;
-    db.prepare("UPDATE quotes SET title = ?, content = ?, author = ?, comment = ?, category = ?, is_pinned = ? WHERE id = ?").run(title, content, author, comment, category, is_pinned ? 1 : 0, id);
-    res.json({ success: true });
+    try {
+      const { id } = req.params;
+      const { title, content, author, comment, category, is_pinned } = req.body;
+      db.prepare("UPDATE quotes SET title = ?, content = ?, author = ?, comment = ?, category = ?, is_pinned = ? WHERE id = ?").run(
+        title || '', 
+        content, 
+        author || '', 
+        comment || '', 
+        category || '未分类', 
+        is_pinned ? 1 : 0, 
+        id
+      );
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Error updating quote:", err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   app.delete("/api/quotes/:id", (req, res) => {
-    const { id } = req.params;
-    db.prepare("DELETE FROM quotes WHERE id = ?").run(id);
-    res.json({ success: true });
+    try {
+      const { id } = req.params;
+      db.prepare("DELETE FROM quotes WHERE id = ?").run(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Error deleting quote:", err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Vite middleware for development

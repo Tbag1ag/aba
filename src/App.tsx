@@ -105,6 +105,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newQuote),
       });
+      
       if (res.ok) {
         const added = await res.json();
         setNewQuote({ title: "", content: "", author: "", comment: "", category: "未分类", is_pinned: false });
@@ -112,12 +113,19 @@ export default function App() {
         fetchQuotes();
         setSelectedQuoteId(added.id);
       } else {
-        const errorData = await res.json();
-        alert(`保存失败: ${errorData.error || "未知错误"}`);
+        const contentType = res.headers.get("content-type");
+        let errorMessage = "未知错误";
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await res.json();
+          errorMessage = errorData.error || errorMessage;
+        } else {
+          errorMessage = await res.text();
+        }
+        alert(`保存失败 (${res.status}): ${errorMessage}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to add quote", err);
-      alert("网络错误，保存失败");
+      alert(`网络错误，保存失败: ${err.message || "请检查网络连接"}`);
     }
   };
 
@@ -207,12 +215,19 @@ export default function App() {
         setEditingId(null);
         fetchQuotes();
       } else {
-        const errorData = await res.json();
-        alert(`更新失败: ${errorData.error || "未知错误"}`);
+        const contentType = res.headers.get("content-type");
+        let errorMessage = "未知错误";
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await res.json();
+          errorMessage = errorData.error || errorMessage;
+        } else {
+          errorMessage = await res.text();
+        }
+        alert(`更新失败 (${res.status}): ${errorMessage}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to update quote", err);
-      alert("网络错误，更新失败");
+      alert(`网络错误，更新失败: ${err.message || "请检查网络连接"}`);
     }
   };
 
