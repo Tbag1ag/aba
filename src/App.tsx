@@ -89,8 +89,17 @@ export default function App() {
     try {
       const res = await fetch("/api/categories");
       if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+        const text = await res.text();
+        throw new Error(`服务器返回错误 (${res.status}): ${text.slice(0, 100)}`);
       }
+      
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        console.error("Expected JSON but got:", text);
+        throw new Error("服务器未返回有效的 JSON 数据。请确保后端服务已正确启动。");
+      }
+
       const data = await res.json();
       console.log("Fetched categories:", data);
       if (Array.isArray(data)) {

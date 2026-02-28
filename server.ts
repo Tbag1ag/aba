@@ -1,78 +1,62 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import Database from "better-sqlite3";
+import { neon } from "@neondatabase/serverless";
 import path from "path";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database("quotes.db");
-console.log("Database initialized at:", path.resolve("quotes.db"));
+const sql = neon(process.env.DATABASE_URL!);
 
-// Initialize database
-try {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+async function initDb() {
+  try {
+    console.log("Initializing Neon database...");
+    
+    // Create tables
+    await sql`
+      CREATE TABLE IF NOT EXISTS categories (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
 
-    CREATE TABLE IF NOT EXISTS quotes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT,
-      content TEXT NOT NULL,
-      author TEXT,
-      comment TEXT,
-      category TEXT DEFAULT '未分类',
-      is_pinned INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-  console.log("Tables ensured.");
-} catch (err) {
-  console.error("Error creating tables:", err);
-}
+    await sql`
+      CREATE TABLE IF NOT EXISTS quotes (
+        id SERIAL PRIMARY KEY,
+        title TEXT,
+        content TEXT NOT NULL,
+        author TEXT,
+        comment TEXT,
+        category TEXT DEFAULT '未分类',
+        is_pinned INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
 
-// Ensure default categories exist
-try {
-  const countResult = db.prepare("SELECT COUNT(*) as count FROM categories").get() as any;
-  console.log("Current categories count:", countResult?.count);
-  if (!countResult || countResult.count === 0) {
-    console.log("Inserting default categories...");
-    const insert = db.prepare("INSERT INTO categories (name) VALUES (?)");
-    ['读书心得', '金句摘抄', '灵感随笔', '未分类'].forEach(name => {
-      try {
-        insert.run(name);
-      } catch (e) {
-        console.warn(`Category ${name} already exists or failed to insert:`, e);
+    // Seed default categories
+    const categories = await sql`SELECT COUNT(*) as count FROM categories`;
+    if (parseInt(categories[0].count) === 0) {
+      console.log("Seeding default categories...");
+      const defaults = ['读书心得', '金句摘抄', '灵感随笔', '未分类'];
+      for (const name of defaults) {
+        await sql`INSERT INTO categories (name) VALUES (${name}) ON CONFLICT DO NOTHING`;
       }
-    });
-  }
-} catch (err) {
-  console.error("Error checking/seeding categories:", err);
-}
-
-// Add title and is_pinned columns if they don't exist (migration)
-try {
-  db.prepare("ALTER TABLE quotes ADD COLUMN title TEXT").run();
-  console.log("Migration: Added 'title' column to quotes.");
-} catch (e: any) {
-  if (!e.message.includes("duplicate column name")) {
-    console.error("Migration error (title):", e.message);
-  }
-}
-try {
-  db.prepare("ALTER TABLE quotes ADD COLUMN is_pinned INTEGER DEFAULT 0").run();
-  console.log("Migration: Added 'is_pinned' column to quotes.");
-} catch (e: any) {
-  if (!e.message.includes("duplicate column name")) {
-    console.error("Migration error (is_pinned):", e.message);
+    }
+    
+    console.log("Database initialization complete.");
+  } catch (err) {
+    console.error("Database initialization failed:", err);
   }
 }
 
 async function startServer() {
+  await initDb();
+  
   const app = express();
   const PORT = 3000;
 
@@ -85,25 +69,39 @@ async function startServer() {
   });
 
   // API Routes
-  app.get("/api/quotes", (req, res) => {
+  app.get("/api/quotes", async (req, res) => {
     try {
       const { category, search } = req.query;
-      let query = "SELECT * FROM quotes WHERE 1=1";
-      const params: any[] = [];
       
-      if (category && category !== '全部') {
-        query += " AND category = ?";
-        params.push(category);
-      }
-
-      if (search) {
-        query += " AND (title LIKE ? OR content LIKE ? OR author LIKE ? OR comment LIKE ?)";
+      let quotes;
+      if (category && category !== '全部' && search) {
         const searchParam = `%${search}%`;
-        params.push(searchParam, searchParam, searchParam, searchParam);
+        quotes = await sql`
+          SELECT * FROM quotes 
+          WHERE category = ${category as string} 
+          AND (title ILIKE ${searchParam} OR content ILIKE ${searchParam} OR author ILIKE ${searchParam} OR comment ILIKE ${searchParam})
+          ORDER BY is_pinned DESC, created_at DESC
+        `;
+      } else if (category && category !== '全部') {
+        quotes = await sql`
+          SELECT * FROM quotes 
+          WHERE category = ${category as string}
+          ORDER BY is_pinned DESC, created_at DESC
+        `;
+      } else if (search) {
+        const searchParam = `%${search}%`;
+        quotes = await sql`
+          SELECT * FROM quotes 
+          WHERE (title ILIKE ${searchParam} OR content ILIKE ${searchParam} OR author ILIKE ${searchParam} OR comment ILIKE ${searchParam})
+          ORDER BY is_pinned DESC, created_at DESC
+        `;
+      } else {
+        quotes = await sql`
+          SELECT * FROM quotes 
+          ORDER BY is_pinned DESC, created_at DESC
+        `;
       }
       
-      query += " ORDER BY is_pinned DESC, created_at DESC";
-      const quotes = db.prepare(query).all(...params);
       res.json(quotes);
     } catch (err: any) {
       console.error("Error fetching quotes:", err);
@@ -111,9 +109,9 @@ async function startServer() {
     }
   });
 
-  app.get("/api/categories", (req, res) => {
+  app.get("/api/categories", async (req, res) => {
     try {
-      const categories = db.prepare("SELECT * FROM categories ORDER BY id ASC").all();
+      const categories = await sql`SELECT * FROM categories ORDER BY id ASC`;
       res.json(categories);
     } catch (err: any) {
       console.error("Error fetching categories:", err);
@@ -121,31 +119,29 @@ async function startServer() {
     }
   });
 
-  app.post("/api/categories", (req, res) => {
+  app.post("/api/categories", async (req, res) => {
     const { name } = req.body;
     console.log(`Attempting to add category: "${name}"`);
     try {
       if (!name || typeof name !== 'string') {
-        console.error("Invalid category name received:", name);
         return res.status(400).json({ error: "分类名称无效" });
       }
-      const info = db.prepare("INSERT INTO categories (name) VALUES (?)").run(name);
-      console.log(`Category added successfully: ID ${info.lastInsertRowid}`);
-      res.json({ id: info.lastInsertRowid, name });
+      const result = await sql`INSERT INTO categories (name) VALUES (${name}) RETURNING id`;
+      res.json({ id: result[0].id, name });
     } catch (err: any) {
       console.error("Error adding category:", err.message);
-      res.status(400).json({ error: err.message.includes("UNIQUE") ? "该分类已存在" : err.message });
+      res.status(400).json({ error: err.message.includes("unique") ? "该分类已存在" : err.message });
     }
   });
 
-  app.delete("/api/categories/:id", (req, res) => {
+  app.delete("/api/categories/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const category = db.prepare("SELECT name FROM categories WHERE id = ?").get(id) as any;
-      if (category) {
-        db.prepare("UPDATE quotes SET category = '未分类' WHERE category = ?").run(category.name);
+      const category = await sql`SELECT name FROM categories WHERE id = ${id}`;
+      if (category.length > 0) {
+        await sql`UPDATE quotes SET category = '未分类' WHERE category = ${category[0].name}`;
       }
-      db.prepare("DELETE FROM categories WHERE id = ?").run(id);
+      await sql`DELETE FROM categories WHERE id = ${id}`;
       res.json({ success: true });
     } catch (err: any) {
       console.error("Error deleting category:", err);
@@ -153,37 +149,30 @@ async function startServer() {
     }
   });
 
-  app.post("/api/quotes", (req, res) => {
+  app.post("/api/quotes", async (req, res) => {
     try {
       const { title, content, author, comment, category, is_pinned } = req.body;
-      const info = db.prepare("INSERT INTO quotes (title, content, author, comment, category, is_pinned) VALUES (?, ?, ?, ?, ?, ?)").run(
-        title || '', 
-        content, 
-        author || '', 
-        comment || '', 
-        category || '未分类', 
-        is_pinned ? 1 : 0
-      );
-      res.json({ id: info.lastInsertRowid, title, content, author, comment, category, is_pinned: !!is_pinned });
+      const result = await sql`
+        INSERT INTO quotes (title, content, author, comment, category, is_pinned) 
+        VALUES (${title || ''}, ${content}, ${author || ''}, ${comment || ''}, ${category || '未分类'}, ${is_pinned ? 1 : 0}) 
+        RETURNING id
+      `;
+      res.json({ id: result[0].id, title, content, author, comment, category, is_pinned: !!is_pinned });
     } catch (err: any) {
       console.error("Error adding quote:", err);
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.put("/api/quotes/:id", (req, res) => {
+  app.put("/api/quotes/:id", async (req, res) => {
     try {
       const { id } = req.params;
       const { title, content, author, comment, category, is_pinned } = req.body;
-      db.prepare("UPDATE quotes SET title = ?, content = ?, author = ?, comment = ?, category = ?, is_pinned = ? WHERE id = ?").run(
-        title || '', 
-        content, 
-        author || '', 
-        comment || '', 
-        category || '未分类', 
-        is_pinned ? 1 : 0, 
-        id
-      );
+      await sql`
+        UPDATE quotes 
+        SET title = ${title || ''}, content = ${content}, author = ${author || ''}, comment = ${comment || ''}, category = ${category || '未分类'}, is_pinned = ${is_pinned ? 1 : 0} 
+        WHERE id = ${id}
+      `;
       res.json({ success: true });
     } catch (err: any) {
       console.error("Error updating quote:", err);
@@ -191,15 +180,20 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/quotes/:id", (req, res) => {
+  app.delete("/api/quotes/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      db.prepare("DELETE FROM quotes WHERE id = ?").run(id);
+      await sql`DELETE FROM quotes WHERE id = ${id}`;
       res.json({ success: true });
     } catch (err: any) {
       console.error("Error deleting quote:", err);
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // API 404 handler
+  app.use("/api/*", (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
   });
 
   // Vite middleware for development
