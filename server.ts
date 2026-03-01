@@ -10,13 +10,32 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DATABASE_URL = process.env.DATABASE_URL;
+const DATABASE_URL = process.env.DATABASE_URL?.trim();
 
 function getSql() {
   if (!DATABASE_URL) {
-    throw new Error("环境变量 DATABASE_URL 未设置。请在设置中添加您的 Neon 数据库连接字符串。");
+    throw new Error("环境变量 DATABASE_URL 未设置。请在 AI Studio 的环境变量设置中添加您的 Neon 数据库连接字符串。");
   }
-  return neon(DATABASE_URL);
+  
+  // Clean up the connection string
+  let cleanedUrl = DATABASE_URL;
+  
+  // Remove 'psql ' prefix if present
+  if (cleanedUrl.startsWith('psql ')) {
+    cleanedUrl = cleanedUrl.substring(5).trim();
+  }
+  
+  // Remove surrounding quotes if present
+  if ((cleanedUrl.startsWith("'") && cleanedUrl.endsWith("'")) || 
+      (cleanedUrl.startsWith('"') && cleanedUrl.endsWith('"'))) {
+    cleanedUrl = cleanedUrl.substring(1, cleanedUrl.length - 1).trim();
+  }
+  
+  try {
+    return neon(cleanedUrl);
+  } catch (err: any) {
+    throw new Error(`无效的连接字符串格式: ${err.message}`);
+  }
 }
 
 async function initDb() {
@@ -68,12 +87,26 @@ async function initDb() {
 }
 
 async function startServer() {
-  await initDb();
-  
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+
+  // Health check endpoint
+  app.get("/api/health", async (req, res) => {
+    try {
+      if (!DATABASE_URL) {
+        return res.json({ status: "error", message: "DATABASE_URL 未设置" });
+      }
+      const sql = getSql();
+      await sql`SELECT 1`;
+      res.json({ status: "ok", message: "数据库连接正常" });
+    } catch (err: any) {
+      res.json({ status: "error", message: `数据库连接失败: ${err.message}` });
+    }
+  });
+
+  await initDb();
 
   // Request logging middleware
   app.use((req, res, next) => {
@@ -153,13 +186,24 @@ async function startServer() {
   app.delete("/api/categories/:id", async (req, res) => {
     try {
       const sql = getSql();
-      const { id } = req.params;
-      const category = await sql`SELECT name FROM categories WHERE id = ${id}`;
-      if (category.length > 0) {
-        await sql`UPDATE quotes SET category = '未分类' WHERE category = ${category[0].name}`;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "无效的分类 ID" });
       }
-      await sql`DELETE FROM categories WHERE id = ${id}`;
-      res.json({ success: true });
+
+      console.log(`Attempting to delete category ID: ${id}`);
+      const category = await sql`SELECT name FROM categories WHERE id = ${id}`;
+      
+      if (category.length > 0) {
+        const categoryName = category[0].name;
+        console.log(`Updating quotes for category: ${categoryName}`);
+        await sql`UPDATE quotes SET category = '未分类' WHERE category = ${categoryName}`;
+        await sql`DELETE FROM categories WHERE id = ${id}`;
+        console.log(`Category ${id} deleted successfully`);
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: "未找到该分类" });
+      }
     } catch (err: any) {
       console.error("Error deleting category:", err);
       res.status(500).json({ error: err.message });
@@ -207,6 +251,29 @@ async function startServer() {
       res.json({ success: true });
     } catch (err: any) {
       console.error("Error deleting quote:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // SQL Editor endpoint
+  app.post("/api/sql", async (req, res) => {
+    try {
+      const { query } = req.body;
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({ error: "SQL 查询无效" });
+      }
+      
+      // Basic safety check: only allow SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER
+      const forbiddenKeywords = ["GRANT", "REVOKE", "CREATE USER", "DROP USER"];
+      if (forbiddenKeywords.some(keyword => query.toUpperCase().includes(keyword))) {
+        return res.status(403).json({ error: "不允许执行敏感权限操作" });
+      }
+
+      const sql = getSql();
+      const result = await (sql as any)(query);
+      res.json({ result });
+    } catch (err: any) {
+      console.error("SQL Execution error:", err);
       res.status(500).json({ error: err.message });
     }
   });

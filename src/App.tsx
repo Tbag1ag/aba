@@ -18,11 +18,13 @@ import {
   FolderOpen,
   Menu,
   Search,
-  Settings2
+  Settings2,
+  Terminal
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { SqlEditor } from "./components/SqlEditor";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -57,6 +59,8 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [dbStatus, setDbStatus] = useState<{ status: string; message: string } | null>(null);
+  const [isSqlEditorOpen, setIsSqlEditorOpen] = useState(false);
 
   const selectedQuote = quotes.find(q => q.id === selectedQuoteId);
 
@@ -66,7 +70,18 @@ export default function App() {
 
   useEffect(() => {
     fetchCategories();
+    checkDbStatus();
   }, []);
+
+  const checkDbStatus = async () => {
+    try {
+      const res = await fetch("/api/health");
+      const data = await res.json();
+      setDbStatus(data);
+    } catch (err) {
+      setDbStatus({ status: "error", message: "无法连接到后端服务" });
+    }
+  };
 
   const fetchQuotes = async () => {
     try {
@@ -271,6 +286,21 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#fdfcf9] text-[#2c2c2c] font-sans selection:bg-[#e6e2d3] flex flex-col">
+      {/* Database Status Banner */}
+      {dbStatus && dbStatus.status === "error" && (
+        <div className="bg-red-50 border-b border-red-100 px-6 py-2 flex items-center justify-between sticky top-0 z-[60]">
+          <div className="flex items-center gap-2 text-red-700 text-[10px] font-bold uppercase tracking-wider">
+            <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+            <span>数据库未连接: {dbStatus.message}</span>
+          </div>
+          <button 
+            onClick={checkDbStatus}
+            className="text-[10px] uppercase font-bold tracking-wider text-red-600 hover:text-red-800 underline underline-offset-2"
+          >
+            点击重试
+          </button>
+        </div>
+      )}
       {/* Header */}
       <header className="sticky top-0 z-20 bg-[#fdfcf9]/80 backdrop-blur-md border-b border-[#e6e2d3] px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
@@ -287,6 +317,14 @@ export default function App() {
               </div>
               <h1 className="text-2xl font-serif font-bold tracking-tight">读书笔记</h1>
             </div>
+            <button 
+              onClick={() => setIsSqlEditorOpen(true)}
+              className="p-2 hover:bg-[#f9f8f4] rounded-lg text-[#5A5A40] transition-colors flex items-center gap-2"
+              title="SQL 控制台"
+            >
+              <Terminal size={18} />
+              <span className="text-xs font-bold uppercase tracking-wider hidden sm:inline">SQL Editor</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-4 w-full md:w-auto flex-1 max-w-xl">
@@ -435,8 +473,11 @@ export default function App() {
         )}
       </AnimatePresence>
 
-        {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto px-6 py-12 scroll-smooth">
+      {/* SQL Editor Modal */}
+      <SqlEditor isOpen={isSqlEditorOpen} onClose={() => setIsSqlEditorOpen(false)} />
+
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto px-6 py-12 scroll-smooth">
           <div className="max-w-3xl mx-auto">
             {/* Add Form */}
             <AnimatePresence>
