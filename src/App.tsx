@@ -45,16 +45,13 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [storageMode, setStorageMode] = useState<'local' | 'api'>(storage.getMode());
-  const [apiBaseUrl, setApiBaseUrl] = useState(storage.getApiBase());
   const [isLoading, setIsLoading] = useState(false);
 
   const selectedQuote = quotes.find(q => q.id === selectedQuoteId);
 
   useEffect(() => {
     fetchData();
-  }, [selectedCategory, searchQuery, storageMode]);
+  }, [selectedCategory, searchQuery]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -82,7 +79,7 @@ export default function App() {
       fetchData();
       setSelectedQuoteId(added.id);
     } catch (err) {
-      alert("保存失败，请检查设置");
+      alert("保存失败，请检查数据库连接");
     }
   };
 
@@ -141,12 +138,6 @@ export default function App() {
     }
   };
 
-  const saveSettings = () => {
-    storage.setMode(storageMode, apiBaseUrl);
-    setIsSettingsOpen(false);
-    fetchData();
-  };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return {
@@ -177,17 +168,10 @@ export default function App() {
             <div className="flex items-center gap-2 ml-2">
               <div className={cn(
                 "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
-                storageMode === 'local' ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"
+                storage.isUsingNeon() ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
               )}>
-                {storageMode === 'local' ? "本地存储" : "远程 API"}
+                {storage.isUsingNeon() ? "Neon 数据库" : "本地存储 (离线)"}
               </div>
-              <button 
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-1.5 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors"
-                title="设置"
-              >
-                <Settings2 size={16} />
-              </button>
             </div>
           </div>
 
@@ -412,32 +396,7 @@ export default function App() {
         </AnimatePresence>
       </div>
 
-      {/* Settings Modal */}
-      <AnimatePresence>
-        {isSettingsOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-8 space-y-6">
-              <div className="flex justify-between items-center"><h2 className="text-xl font-serif font-bold">应用设置</h2><button onClick={() => setIsSettingsOpen(false)}><X size={20} /></button></div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-[#8e8e7e] mb-2">存储模式</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => setStorageMode('local')} className={cn("flex items-center justify-center gap-2 p-3 rounded-xl border transition-all", storageMode === 'local' ? "bg-[#5A5A40] text-white border-[#5A5A40]" : "bg-white border-[#e6e2d3] hover:bg-[#f9f8f4]")}><Database size={16} /> 本地存储</button>
-                    <button onClick={() => setStorageMode('api')} className={cn("flex items-center justify-center gap-2 p-3 rounded-xl border transition-all", storageMode === 'api' ? "bg-[#5A5A40] text-white border-[#5A5A40]" : "bg-white border-[#e6e2d3] hover:bg-[#f9f8f4]")}><Globe size={16} /> 远程 API</button>
-                  </div>
-                </div>
-                {storageMode === 'api' && (
-                  <div>
-                    <label className="block text-xs font-bold uppercase text-[#8e8e7e] mb-2">API 基础地址</label>
-                    <input type="text" value={apiBaseUrl} onChange={(e) => setApiBaseUrl(e.target.value)} className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm" placeholder="https://your-api.com/api" />
-                  </div>
-                )}
-              </div>
-              <button onClick={saveSettings} className="w-full bg-[#5A5A40] text-white py-3 rounded-xl font-medium shadow-lg hover:bg-[#4a4a34] transition-all">保存并刷新</button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Settings Modal Removed */}
     </div>
   );
 }
