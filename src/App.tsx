@@ -67,7 +67,19 @@ export default function App() {
   }, [selectedQuoteId, isEditingSidebar]);
 
   useEffect(() => {
-    fetchData();
+    const initGarden = async () => {
+      setIsLoading(true);
+      try {
+        // Silent decay on load
+        await storage.decayKnowledge();
+        await fetchData();
+      } catch (err) {
+        console.error("Garden maintenance failed", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    initGarden();
   }, [selectedCategory, searchQuery]);
 
   const fetchData = async () => {
@@ -230,60 +242,63 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#fdfcf9] text-[#2c2c2c] font-sans selection:bg-[#e6e2d3] flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-[#fdfcf9]/80 backdrop-blur-md border-b border-[#e6e2d3] px-6 py-4">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-4 w-full md:w-auto">
-            <button 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-[#f9f8f4] rounded-lg text-[#5A5A40] transition-colors"
-            >
-              <Menu size={20} />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[#5A5A40] rounded-xl flex items-center justify-center text-white shadow-lg">
-                <BookOpen size={20} />
+      <header className="sticky top-0 z-20 bg-[#fdfcf9]/80 backdrop-blur-md border-b border-[#e6e2d3] px-3 sm:px-6 py-2 sm:py-4">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-2 sm:gap-4">
+          <div className="flex items-center justify-between w-full md:w-auto gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <button 
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="p-1.5 sm:p-2 hover:bg-[#f9f8f4] rounded-lg text-[#5A5A40] transition-colors"
+              >
+                <Menu size={18} />
+              </button>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#5A5A40] rounded-lg sm:rounded-xl flex items-center justify-center text-white shadow-lg">
+                  <BookOpen size={16} className="sm:hidden" />
+                  <BookOpen size={20} className="hidden sm:block" />
+                </div>
+                <h1 className="text-base sm:text-2xl font-serif font-bold tracking-tight">读书笔记</h1>
               </div>
-              <h1 className="text-2xl font-serif font-bold tracking-tight">读书笔记</h1>
             </div>
-            <div className="flex items-center gap-2 ml-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               <div className={cn(
-                "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                "px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold uppercase tracking-wider",
                 storage.isUsingNeon() ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
               )}>
-                {storage.isUsingNeon() ? "Neon 数据库" : "本地存储 (离线)"}
+                {storage.isUsingNeon() ? "Neon" : "本地"}
               </div>
-              <div className="flex items-center gap-1 border-l border-[#e6e2d3] ml-2 pl-2">
+              <div className="flex items-center gap-0.5 sm:gap-1 border-l border-[#e6e2d3] ml-1 pl-1 sm:ml-2 sm:pl-2">
                 <button 
                   onClick={handleExport}
-                  className="p-1.5 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors"
-                  title="导出知识库"
+                  className="p-1 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors"
+                  title="导出"
                 >
-                  <Download size={16} />
+                  <Download size={14} />
                 </button>
-                <label className="p-1.5 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors cursor-pointer" title="导入知识库">
-                  <Upload size={16} />
+                <label className="p-1 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors cursor-pointer" title="导入">
+                  <Upload size={14} />
                   <input type="file" accept=".json" onChange={handleImport} className="hidden" />
                 </label>
                 <button 
                   onClick={handleGardenMaintenance}
-                  className={cn("p-1.5 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors", isLoading && "animate-spin")}
-                  title="园林维护 (定期索引)"
+                  className={cn("p-1 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors", isLoading && "animate-spin")}
+                  title="维护"
                 >
-                  <RefreshCw size={16} />
+                  <RefreshCw size={14} />
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 w-full md:w-auto flex-1 max-w-xl">
+          <div className="flex items-center gap-2 w-full md:w-auto flex-1 max-w-xl">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8e8e7e]" size={18} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8e8e7e]" size={14} />
               <input 
                 type="text"
-                placeholder="搜索标题、内容、作者..."
+                placeholder="搜索..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#f9f8f4] border-none rounded-full pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-[#5A5A40]/20 transition-all"
+                className="w-full bg-[#f9f8f4] border-none rounded-full pl-9 pr-4 py-1.5 sm:py-2 text-xs sm:text-sm focus:ring-2 focus:ring-[#5A5A40]/20 transition-all"
               />
             </div>
             <button 
@@ -315,13 +330,13 @@ export default function App() {
         <AnimatePresence>
           {isSidebarOpen && (
             <motion.nav
-              initial={{ x: -280, opacity: 0 }}
+              initial={{ x: -260, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -280, opacity: 0 }}
+              exit={{ x: -260, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed lg:relative inset-y-0 left-0 z-40 bg-[#fdfcf9] border-r border-[#e6e2d3] overflow-y-auto w-[280px] shrink-0 shadow-2xl lg:shadow-none"
+              className="fixed lg:relative inset-y-0 left-0 z-40 bg-[#fdfcf9] border-r border-[#e6e2d3] overflow-y-auto w-[260px] shrink-0 shadow-2xl lg:shadow-none"
             >
-              <div className="p-6 space-y-8">
+              <div className="p-4 sm:p-6 space-y-6 sm:space-y-8">
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#8e8e7e]">笔记分类</h3>
@@ -384,7 +399,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 sm:py-12 scroll-smooth bg-[#fdfcf9]">
+        <main className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-12 scroll-smooth bg-[#fdfcf9]">
           <div className="max-w-3xl mx-auto">
             <AnimatePresence>
               {isAdding && (
@@ -392,7 +407,7 @@ export default function App() {
                   initial={{ opacity: 0, y: -20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className="mb-8 sm:mb-12 bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-sm border border-[#e6e2d3]"
+                  className="mb-6 sm:mb-12 bg-white rounded-xl sm:rounded-3xl p-4 sm:p-8 shadow-sm border border-[#e6e2d3]"
                 >
                   <form onSubmit={handleAddQuote} className="space-y-6">
                     <input
@@ -463,7 +478,7 @@ export default function App() {
                       layout 
                       key={quote.id} 
                       className={cn(
-                        "group rounded-2xl sm:rounded-[2rem] p-5 sm:p-8 shadow-sm border transition-all duration-500",
+                        "group rounded-xl sm:rounded-[2rem] p-4 sm:p-8 shadow-sm border transition-all duration-500",
                         state.cardBg,
                         selectedQuoteId === quote.id ? "ring-2 ring-[#5A5A40]/30 shadow-md" : "hover:shadow-md"
                       )}
@@ -502,8 +517,8 @@ export default function App() {
                               <button onClick={(e) => { e.stopPropagation(); handleDelete(quote.id); }} className="p-2 bg-white/80 hover:bg-white rounded-full shadow-sm text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
                             </div>
                           </div>
-                          <h3 className="text-lg font-sans font-bold mb-2 text-gray-900 tracking-tight">{quote.title}</h3>
-                          <p className="font-sans text-base mb-4 text-gray-700 leading-relaxed whitespace-pre-wrap">{quote.content}</p>
+                          <h3 className="text-base sm:text-lg font-sans font-bold mb-1 sm:mb-2 text-gray-900 tracking-tight">{quote.title}</h3>
+                          <p className="font-sans text-sm sm:text-base mb-3 sm:mb-4 text-gray-700 leading-relaxed whitespace-pre-wrap">{quote.content}</p>
                           <div className="flex justify-between items-center text-xs text-gray-500">
                             <div className="flex flex-col gap-1">
                               <cite className="not-italic font-medium border-l-2 border-[#5A5A40] pl-3 text-[#5A5A40]">— {quote.author}</cite>
@@ -546,115 +561,115 @@ export default function App() {
               exit={{ x: "100%" }}
               className="fixed inset-y-0 right-0 w-full md:w-[450px] bg-white shadow-2xl z-50 flex flex-col border-l border-[#e6e2d3]"
             >
-              <div className="p-6 border-b flex justify-between items-center bg-[#fdfcf9] sticky top-0 z-10">
+              <div className="p-4 sm:p-6 border-b flex justify-between items-center bg-[#fdfcf9] sticky top-0 z-10">
                 <div className="flex items-center gap-3">
-                  <h2 className="font-bold text-sm uppercase tracking-widest">参阅感悟</h2>
+                  <h2 className="font-bold text-xs sm:text-sm uppercase tracking-widest">参阅感悟</h2>
                   {isEditingSidebar ? (
-                    <button onClick={() => handleUpdate(selectedQuote.id)} className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 text-xs font-bold">
-                      <Save size={14} /> 保存
+                    <button onClick={() => handleUpdate(selectedQuote.id)} className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 text-[10px] sm:text-xs font-bold">
+                      <Save size={12} /> 保存
                     </button>
                   ) : (
-                    <button onClick={() => setIsEditingSidebar(true)} className="text-[#8e8e7e] hover:text-[#5A5A40] flex items-center gap-1 text-xs font-bold">
-                      <Edit3 size={14} /> 编辑
+                    <button onClick={() => setIsEditingSidebar(true)} className="text-[#8e8e7e] hover:text-[#5A5A40] flex items-center gap-1 text-[10px] sm:text-xs font-bold">
+                      <Edit3 size={12} /> 编辑
                     </button>
                   )}
                 </div>
-                <button onClick={() => { setSelectedQuoteId(null); setIsEditingSidebar(false); }} className="p-2 hover:bg-black/5 rounded-full transition-colors"><X size={20} /></button>
+                <button onClick={() => { setSelectedQuoteId(null); setIsEditingSidebar(false); }} className="p-1.5 hover:bg-black/5 rounded-full transition-colors"><X size={18} /></button>
               </div>
-              <div className="p-5 sm:p-8 space-y-6 sm:space-y-8 overflow-y-auto flex-1">
+              <div className="p-4 sm:p-8 space-y-5 sm:space-y-8 overflow-y-auto flex-1">
                 {isEditingSidebar ? (
-                  <div className="space-y-6">
+                  <div className="space-y-4 sm:space-y-6">
                     <div>
-                      <label className="block text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">标题</label>
+                      <label className="block text-[9px] sm:text-[10px] font-bold uppercase text-[#8e8e7e] mb-1 sm:mb-2">标题</label>
                       <input 
                         type="text" 
                         value={editForm.title} 
                         onChange={e => setEditForm({ ...editForm, title: e.target.value })}
-                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm font-medium"
+                        className="w-full bg-[#f9f8f4] border-none rounded-lg sm:rounded-xl p-2 sm:p-3 text-xs sm:text-sm font-medium"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">内容 (支持换行)</label>
+                      <label className="block text-[9px] sm:text-[10px] font-bold uppercase text-[#8e8e7e] mb-1 sm:mb-2">内容 (支持换行)</label>
                       <textarea 
                         value={editForm.content} 
                         onChange={e => setEditForm({ ...editForm, content: e.target.value })}
-                        className="w-full bg-[#f9f8f4] border-none rounded-2xl p-4 text-sm font-sans leading-relaxed min-h-[150px]"
+                        className="w-full bg-[#f9f8f4] border-none rounded-xl sm:rounded-2xl p-3 sm:p-4 text-xs sm:text-sm font-sans leading-relaxed min-h-[120px] sm:min-h-[150px]"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">作者/出处</label>
+                      <label className="block text-[9px] sm:text-[10px] font-bold uppercase text-[#8e8e7e] mb-1 sm:mb-2">作者/出处</label>
                       <input 
                         type="text" 
                         value={editForm.author} 
                         onChange={e => setEditForm({ ...editForm, author: e.target.value })}
-                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
+                        className="w-full bg-[#f9f8f4] border-none rounded-lg sm:rounded-xl p-2 sm:p-3 text-xs sm:text-sm"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">原文链接</label>
+                      <label className="block text-[9px] sm:text-[10px] font-bold uppercase text-[#8e8e7e] mb-1 sm:mb-2">原文链接</label>
                       <input 
                         type="text" 
                         value={editForm.source_url} 
                         onChange={e => setEditForm({ ...editForm, source_url: e.target.value })}
-                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
+                        className="w-full bg-[#f9f8f4] border-none rounded-lg sm:rounded-xl p-2 sm:p-3 text-xs sm:text-sm"
                         placeholder="https://..."
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">我的感悟</label>
+                      <label className="block text-[9px] sm:text-[10px] font-bold uppercase text-[#8e8e7e] mb-1 sm:mb-2">我的感悟</label>
                       <textarea 
                         value={editForm.comment} 
                         onChange={e => setEditForm({ ...editForm, comment: e.target.value })}
-                        className="w-full bg-[#f9f8f4] border-none rounded-2xl p-4 text-sm min-h-[100px]"
+                        className="w-full bg-[#f9f8f4] border-none rounded-xl sm:rounded-2xl p-3 sm:p-4 text-xs sm:text-sm min-h-[80px] sm:min-h-[100px]"
                       />
                     </div>
-                    <div className="flex gap-3 pt-4">
+                    <div className="flex gap-2 sm:gap-3 pt-2 sm:pt-4">
                       <button 
                         onClick={() => handleUpdate(selectedQuote.id)}
-                        className="flex-1 bg-[#5A5A40] text-white py-3 rounded-xl font-bold shadow-lg"
+                        className="flex-1 bg-[#5A5A40] text-white py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-sm font-bold shadow-lg"
                       >
-                        确认修改
+                        确认
                       </button>
                       <button 
                         onClick={() => setIsEditingSidebar(false)}
-                        className="flex-1 bg-[#f9f8f4] text-[#8e8e7e] py-3 rounded-xl font-bold"
+                        className="flex-1 bg-[#f9f8f4] text-[#8e8e7e] py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-sm font-bold"
                       >
                         取消
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-8">
-                    <div className="space-y-4">
-                      <h3 className="text-2xl font-sans font-bold text-gray-900 leading-tight tracking-tight">{selectedQuote.title}</h3>
-                      <div className="bg-[#f9f8f4] p-8 rounded-[2rem] border border-[#e6e2d3] font-sans text-lg text-gray-800 leading-relaxed whitespace-pre-wrap shadow-inner">
+                  <div className="space-y-6 sm:space-y-8">
+                    <div className="space-y-3 sm:space-y-4">
+                      <h3 className="text-xl sm:text-2xl font-sans font-bold text-gray-900 leading-tight tracking-tight">{selectedQuote.title}</h3>
+                      <div className="bg-[#f9f8f4] p-5 sm:p-8 rounded-2xl sm:rounded-[2rem] border border-[#e6e2d3] font-sans text-base sm:text-lg text-gray-800 leading-relaxed whitespace-pre-wrap shadow-inner">
                         {selectedQuote.content}
                       </div>
-                      <div className="flex justify-between items-center text-sm">
+                      <div className="flex justify-between items-center text-xs sm:text-sm">
                         <cite className="not-italic font-medium text-[#5A5A40]">— {selectedQuote.author}</cite>
                         {selectedQuote.source_url && (
                           <a href={selectedQuote.source_url} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline flex items-center gap-1">
-                            <Globe size={14} /> 查看原文
+                            <Globe size={12} /> 查看原文
                           </a>
                         )}
                       </div>
                     </div>
                     
-                    <div className="pt-8 border-t border-[#e6e2d3]">
-                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-4">我的感悟</h4>
-                      <div className="text-gray-700 leading-relaxed whitespace-pre-wrap text-base">
+                    <div className="pt-6 sm:pt-8 border-t border-[#e6e2d3]">
+                      <h4 className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-3 sm:mb-4">我的感悟</h4>
+                      <div className="text-gray-700 leading-relaxed whitespace-pre-wrap text-sm sm:text-base">
                         {selectedQuote.comment || "暂无感悟..."}
                       </div>
                     </div>
 
-                    <div className="pt-8 border-t border-[#e6e2d3] grid grid-cols-2 gap-4">
+                    <div className="pt-6 sm:pt-8 border-t border-[#e6e2d3] grid grid-cols-2 gap-3 sm:gap-4">
                       <div>
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-1">分类</h4>
-                        <p className="text-sm font-medium">{selectedQuote.category}</p>
+                        <h4 className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-1">分类</h4>
+                        <p className="text-xs sm:text-sm font-medium">{selectedQuote.category}</p>
                       </div>
                       <div>
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-1">创建时间</h4>
-                        <p className="text-sm font-medium">{new Date(selectedQuote.created_at).toLocaleDateString()}</p>
+                        <h4 className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-1">创建时间</h4>
+                        <p className="text-xs sm:text-sm font-medium">{new Date(selectedQuote.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
                   </div>
