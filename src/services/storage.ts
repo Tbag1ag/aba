@@ -8,6 +8,8 @@ export interface Quote {
   comment: string;
   category: string;
   is_pinned: boolean;
+  confidence: number;
+  last_accessed_at: string;
   created_at: string;
 }
 
@@ -17,10 +19,10 @@ export interface Category {
 }
 
 // Get the database URL from environment variables
-// Note: In Vite, variables must be prefixed with VITE_ to be accessible in the browser
 const getDatabaseUrl = () => {
   try {
-    return (import.meta as any).env?.VITE_DATABASE_URL;
+    // We use process.env.DATABASE_URL which is injected by Vite's define config
+    return (process.env as any).DATABASE_URL;
   } catch (e) {
     return undefined;
   }
@@ -114,36 +116,19 @@ class StorageService {
   async getQuotes(category?: string, search?: string): Promise<Quote[]> {
     if (this.sql) {
       try {
-        let query = 'SELECT * FROM quotes WHERE 1=1';
-        const args: any[] = [];
-        
-        if (category && category !== '全部') {
-          query += ' AND category = $1';
-          args.push(category);
-        }
-        
-        if (search) {
+        let result;
+        if (category && category !== '全部' && search) {
           const s = `%${search}%`;
-          const searchIdx = args.length + 1;
-          query += ` AND (title ILIKE $${searchIdx} OR content ILIKE $${searchIdx} OR author ILIKE $${searchIdx} OR comment ILIKE $${searchIdx})`;
-          args.push(s);
-        }
-        
-        query += ' ORDER BY is_pinned DESC, created_at DESC';
-        
-        // Use the tagged template literal correctly with dynamic parts is tricky with neon
-        // For simplicity and safety with the neon driver:
-        if (args.length === 0) {
-          return (await this.sql`SELECT * FROM quotes ORDER BY is_pinned DESC, created_at DESC`) as Quote[];
-        } else if (args.length === 1 && category && category !== '全部') {
-          return (await this.sql`SELECT * FROM quotes WHERE category = ${category} ORDER BY is_pinned DESC, created_at DESC`) as Quote[];
-        } else if (args.length === 1 && search) {
+          result = await this.sql`SELECT * FROM quotes WHERE category = ${category} AND (title ILIKE ${s} OR content ILIKE ${s} OR author ILIKE ${s} OR comment ILIKE ${s}) ORDER BY is_pinned DESC, confidence DESC, created_at DESC`;
+        } else if (category && category !== '全部') {
+          result = await this.sql`SELECT * FROM quotes WHERE category = ${category} ORDER BY is_pinned DESC, confidence DESC, created_at DESC`;
+        } else if (search) {
           const s = `%${search}%`;
-          return (await this.sql`SELECT * FROM quotes WHERE (title ILIKE ${s} OR content ILIKE ${s} OR author ILIKE ${s} OR comment ILIKE ${s}) ORDER BY is_pinned DESC, created_at DESC`) as Quote[];
+          result = await this.sql`SELECT * FROM quotes WHERE (title ILIKE ${s} OR content ILIKE ${s} OR author ILIKE ${s} OR comment ILIKE ${s}) ORDER BY is_pinned DESC, confidence DESC, created_at DESC`;
         } else {
-          const s = `%${search}%`;
-          return (await this.sql`SELECT * FROM quotes WHERE category = ${category} AND (title ILIKE ${s} OR content ILIKE ${s} OR author ILIKE ${s} OR comment ILIKE ${s}) ORDER BY is_pinned DESC, created_at DESC`) as Quote[];
+          result = await this.sql`SELECT * FROM quotes ORDER BY is_pinned DESC, confidence DESC, created_at DESC`;
         }
+        return result as Quote[];
       } catch (err) {
         console.error("Neon fetch quotes error:", err);
         return this.getLocalQuotes(category, search);
@@ -160,20 +145,25 @@ class StorageService {
       const s = search.toLowerCase();
       quotes = quotes.filter(q => q.title.toLowerCase().includes(s) || q.content.toLowerCase().includes(s) || q.author.toLowerCase().includes(s));
     }
-    return quotes.sort((a, b) => (a.is_pinned === b.is_pinned ? 0 : a.is_pinned ? -1 : 1));
+    return quotes.sort((a, b) => {
+      if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+      if (a.confidence !== b.confidence) return b.confidence - a.confidence;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
   }
 
-  async addQuote(quote: Omit<Quote, 'id' | 'created_at'>): Promise<Quote> {
+  async addQuote(quote: Omit<Quote, 'id' | 'created_at' | 'confidence' | 'last_accessed_at'>): Promise<Quote> {
+    const now = new Date().toISOString();
     if (this.sql) {
       const result = await this.sql`
-        INSERT INTO quotes (title, content, author, comment, category, is_pinned) 
-        VALUES (${quote.title}, ${quote.content}, ${quote.author}, ${quote.comment}, ${quote.category}, ${quote.is_pinned}) 
+        INSERT INTO quotes (title, content, author, comment, category, is_pinned, confidence, last_accessed_at) 
+        VALUES (${quote.title}, ${quote.content}, ${quote.author}, ${quote.comment}, ${quote.category}, ${quote.is_pinned}, 0.7, ${now}) 
         RETURNING *
       `;
       return result[0] as Quote;
     }
     const quotes = await this.getLocalQuotes();
-    const newQuote = { ...quote, id: Date.now(), created_at: new Date().toISOString() };
+    const newQuote = { ...quote, id: Date.now(), confidence: 0.7, last_accessed_at: now, created_at: now };
     quotes.push(newQuote);
     localStorage.setItem('quotes', JSON.stringify(quotes));
     return newQuote;
@@ -181,13 +171,13 @@ class StorageService {
 
   async updateQuote(id: number, quote: Partial<Quote>): Promise<Quote> {
     if (this.sql) {
-      // Direct update for common fields
       const existing = (await this.sql`SELECT * FROM quotes WHERE id = ${id}`)[0];
       const updated = { ...existing, ...quote };
       const result = await this.sql`
         UPDATE quotes 
         SET title = ${updated.title}, content = ${updated.content}, author = ${updated.author}, 
-            comment = ${updated.comment}, category = ${updated.category}, is_pinned = ${updated.is_pinned}
+            comment = ${updated.comment}, category = ${updated.category}, is_pinned = ${updated.is_pinned},
+            confidence = ${updated.confidence}, last_accessed_at = ${updated.last_accessed_at}
         WHERE id = ${id}
         RETURNING *
       `;
@@ -212,7 +202,90 @@ class StorageService {
     quotes = quotes.filter(q => q.id !== id);
     localStorage.setItem('quotes', JSON.stringify(quotes));
   }
+
+  // Knowledge Lifecycle Logic
+  async boostKnowledge(id: number): Promise<void> {
+    const now = new Date().toISOString();
+    if (this.sql) {
+      await this.sql`
+        UPDATE quotes 
+        SET confidence = LEAST(1.0, confidence + 0.1), 
+            last_accessed_at = ${now}
+        WHERE id = ${id}
+      `;
+    } else {
+      let quotes = await this.getLocalQuotes();
+      const idx = quotes.findIndex(q => q.id === id);
+      if (idx !== -1) {
+        quotes[idx].confidence = Math.min(1.0, quotes[idx].confidence + 0.1);
+        quotes[idx].last_accessed_at = now;
+        localStorage.setItem('quotes', JSON.stringify(quotes));
+      }
+    }
+  }
+
+  async decayKnowledge(): Promise<void> {
+    const now = new Date();
+    if (this.sql) {
+      // Decay logic: -0.05 confidence for every 7 days of inactivity
+      await this.sql`
+        UPDATE quotes 
+        SET confidence = GREATEST(0.0, confidence - 0.05)
+        WHERE (EXTRACT(EPOCH FROM (${now} - last_accessed_at)) / 86400) > 7
+      `;
+    } else {
+      let quotes = await this.getLocalQuotes();
+      const updatedQuotes = quotes.map(q => {
+        const lastAccess = new Date(q.last_accessed_at);
+        const diffDays = (now.getTime() - lastAccess.getTime()) / (1000 * 3600 * 24);
+        if (diffDays > 7) {
+          return { ...q, confidence: Math.max(0, q.confidence - 0.05) };
+        }
+        return q;
+      });
+      localStorage.setItem('quotes', JSON.stringify(updatedQuotes));
+    }
+  }
+
+  // Export/Import
+  async exportData(): Promise<string> {
+    const quotes = await this.getQuotes();
+    const categories = await this.getCategories();
+    return JSON.stringify({ quotes, categories, version: '1.0', export_at: new Date().toISOString() }, null, 2);
+  }
+
+  async importData(json: string): Promise<void> {
+    const data = JSON.parse(json);
+    if (!data.quotes || !data.categories) throw new Error('Invalid data format');
+
+    if (this.sql) {
+      // Clear existing (optional, but safer for a clean import)
+      await this.sql`DELETE FROM quotes`;
+      await this.sql`DELETE FROM categories`;
+
+      // Import categories
+      for (const cat of data.categories) {
+        await this.sql`INSERT INTO categories (id, name) VALUES (${cat.id}, ${cat.name}) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`;
+      }
+
+      // Import quotes
+      for (const q of data.quotes) {
+        await this.sql`
+          INSERT INTO quotes (id, title, content, author, comment, category, is_pinned, confidence, last_accessed_at, created_at)
+          VALUES (${q.id}, ${q.title}, ${q.content}, ${q.author}, ${q.comment}, ${q.category}, ${q.is_pinned}, ${q.confidence || 0.7}, ${q.last_accessed_at || q.created_at}, ${q.created_at})
+          ON CONFLICT (id) DO UPDATE SET 
+            title = EXCLUDED.title, content = EXCLUDED.content, author = EXCLUDED.author,
+            comment = EXCLUDED.comment, category = EXCLUDED.category, is_pinned = EXCLUDED.is_pinned,
+            confidence = EXCLUDED.confidence, last_accessed_at = EXCLUDED.last_accessed_at
+        `;
+      }
+    } else {
+      localStorage.setItem('quotes', JSON.stringify(data.quotes));
+      localStorage.setItem('categories', JSON.stringify(data.categories));
+    }
+  }
 }
 
 export const storage = new StorageService();
+
 

@@ -21,7 +21,15 @@ import {
   Settings2,
   Globe,
   Database,
-  CheckCircle2
+  CheckCircle2,
+  Download,
+  Upload,
+  Sprout,
+  Leaf,
+  Wind,
+  Archive,
+  RefreshCw,
+  Info
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { clsx, type ClassValue } from "clsx";
@@ -46,6 +54,8 @@ export default function App() {
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const selectedQuote = quotes.find(q => q.id === selectedQuoteId);
 
@@ -67,6 +77,51 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleGardenMaintenance = async () => {
+    setIsLoading(true);
+    try {
+      await storage.decayKnowledge();
+      await fetchData();
+      alert("园林维护完成：过时的知识已自然凋零，常用的知识保持茂盛。");
+    } catch (err) {
+      alert("维护失败");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const data = await storage.exportData();
+      const blob = new Blob([data], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `knowledge-garden-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("导出失败");
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const json = event.target?.result as string;
+        await storage.importData(json);
+        alert("导入成功！");
+        fetchData();
+      } catch (err) {
+        alert("导入失败，请检查文件格式");
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleAddQuote = async (e: React.FormEvent) => {
@@ -128,6 +183,23 @@ export default function App() {
     }
   };
 
+  const handleBoost = async (id: number) => {
+    try {
+      await storage.boostKnowledge(id);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const getKnowledgeState = (confidence: number) => {
+    if (confidence <= 0) return { icon: <Archive size={14} />, label: "土壤", color: "text-stone-600", bg: "bg-stone-100", cardBg: "bg-[#f5f5f4] border-stone-200" };
+    if (confidence < 0.3) return { icon: <Wind size={14} />, label: "枯叶", color: "text-orange-800", bg: "bg-orange-100", cardBg: "bg-[#fff7ed] border-orange-200" };
+    if (confidence < 0.7) return { icon: <Wind size={14} />, label: "黄叶", color: "text-amber-700", bg: "bg-amber-100", cardBg: "bg-[#fffbeb] border-amber-200" };
+    if (confidence < 0.8) return { icon: <Sprout size={14} />, label: "萌芽", color: "text-lime-700", bg: "bg-lime-100", cardBg: "bg-[#f7fee7] border-lime-200" };
+    return { icon: <Leaf size={14} />, label: "绿叶", color: "text-emerald-700", bg: "bg-emerald-100", cardBg: "bg-[#f0fdf4] border-emerald-200" };
+  };
+
   const handleUpdate = async (id: number) => {
     try {
       await storage.updateQuote(id, editForm);
@@ -171,6 +243,26 @@ export default function App() {
                 storage.isUsingNeon() ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
               )}>
                 {storage.isUsingNeon() ? "Neon 数据库" : "本地存储 (离线)"}
+              </div>
+              <div className="flex items-center gap-1 border-l border-[#e6e2d3] ml-2 pl-2">
+                <button 
+                  onClick={handleExport}
+                  className="p-1.5 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors"
+                  title="导出知识库"
+                >
+                  <Download size={16} />
+                </button>
+                <label className="p-1.5 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors cursor-pointer" title="导入知识库">
+                  <Upload size={16} />
+                  <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                </label>
+                <button 
+                  onClick={handleGardenMaintenance}
+                  className={cn("p-1.5 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors", isLoading && "animate-spin")}
+                  title="园林维护 (定期索引)"
+                >
+                  <RefreshCw size={16} />
+                </button>
               </div>
             </div>
           </div>
@@ -334,35 +426,62 @@ export default function App() {
               ) : (
                 quotes.map((quote) => {
                   const date = formatDate(quote.created_at);
+                  const state = getKnowledgeState(quote.confidence);
                   return (
-                    <motion.article layout key={quote.id} className="group bg-white rounded-[2rem] p-8 shadow-sm border border-[#e6e2d3] hover:border-[#5A5A40]/30 transition-all">
+                    <motion.article 
+                      layout 
+                      key={quote.id} 
+                      className={cn(
+                        "group rounded-[2rem] p-8 shadow-sm border transition-all duration-500",
+                        state.cardBg,
+                        selectedQuoteId === quote.id ? "ring-2 ring-[#5A5A40]/30 shadow-md" : "hover:shadow-md"
+                      )}
+                      onClick={() => setSelectedQuoteId(quote.id)}
+                    >
                       {editingId === quote.id ? (
-                        <div className="space-y-4">
-                          <input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className="w-full bg-[#f9f8f4] rounded-lg p-2" />
-                          <textarea value={editForm.content} onChange={e => setEditForm({ ...editForm, content: e.target.value })} className="w-full bg-[#f9f8f4] rounded-xl p-4 font-serif italic" />
+                        <div className="space-y-4" onClick={e => e.stopPropagation()}>
+                          <input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className="w-full bg-white/50 rounded-lg p-2 border border-black/5" />
+                          <textarea value={editForm.content} onChange={e => setEditForm({ ...editForm, content: e.target.value })} className="w-full bg-white/50 rounded-xl p-4 font-serif italic border border-black/5" />
                           <div className="flex justify-end gap-2">
-                            <button onClick={() => setEditingId(null)}>取消</button>
-                            <button onClick={() => handleUpdate(quote.id)} className="bg-[#5A5A40] text-white px-4 py-2 rounded-full">保存</button>
+                            <button onClick={() => setEditingId(null)} className="px-4 py-2 text-sm">取消</button>
+                            <button onClick={() => handleUpdate(quote.id)} className="bg-[#5A5A40] text-white px-6 py-2 rounded-full text-sm font-medium">保存</button>
                           </div>
                         </div>
                       ) : (
                         <div>
                           <div className="flex justify-between items-start mb-4">
-                            <div className="flex gap-2">
-                              <span className="text-[10px] font-bold uppercase bg-[#5A5A40]/10 px-2 py-0.5 rounded">{quote.category}</span>
-                              {quote.is_pinned && <span className="text-[10px] font-bold uppercase bg-amber-50 text-amber-600 px-2 py-0.5 rounded flex items-center gap-1"><Pin size={10} /> 置顶</span>}
+                            <div className="flex gap-2 items-center">
+                              <span className="text-[10px] font-bold uppercase bg-black/5 px-2 py-0.5 rounded text-[#5A5A40]">{quote.category}</span>
+                              <div className={cn("flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded shadow-sm", state.bg, state.color)}>
+                                {state.icon}
+                                {state.label} {(quote.confidence * 100).toFixed(0)}%
+                              </div>
+                              {quote.is_pinned && <span className="text-[10px] font-bold uppercase bg-amber-50 text-amber-600 px-2 py-0.5 rounded flex items-center gap-1 shadow-sm"><Pin size={10} /> 置顶</span>}
                             </div>
                             <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleTogglePin(quote)} className={quote.is_pinned ? "text-amber-500" : "text-gray-400"}><Pin size={16} /></button>
-                              <button onClick={() => { setEditingId(quote.id); setEditForm(quote); }} className="text-gray-400"><Edit3 size={16} /></button>
-                              <button onClick={() => handleDelete(quote.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleBoost(quote.id); }} 
+                                className="p-2 bg-white/80 hover:bg-white rounded-full text-emerald-600 shadow-sm transition-all hover:scale-110 active:scale-90"
+                                title="索引/滋养知识"
+                              >
+                                <RefreshCw size={16} />
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); handleTogglePin(quote); }} className={cn("p-2 bg-white/80 hover:bg-white rounded-full shadow-sm transition-all", quote.is_pinned ? "text-amber-500" : "text-gray-400")}><Pin size={16} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); setEditingId(quote.id); setEditForm(quote); }} className="p-2 bg-white/80 hover:bg-white rounded-full shadow-sm text-gray-400"><Edit3 size={16} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); handleDelete(quote.id); }} className="p-2 bg-white/80 hover:bg-white rounded-full shadow-sm text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
                             </div>
                           </div>
-                          <h3 className="text-lg font-serif font-bold mb-2">{quote.title}</h3>
-                          <p className="font-serif text-base italic mb-4 text-[#4a4a4a]">{quote.content}</p>
-                          <div className="flex justify-between items-center text-xs text-[#8e8e7e]">
-                            <cite className="not-italic font-medium border-l-2 border-[#5A5A40] pl-3">— {quote.author}</cite>
-                            <span>{date.month} {date.day}, {date.year}</span>
+                          <h3 className="text-lg font-serif font-bold mb-2 text-gray-900">{quote.title}</h3>
+                          <p className="font-serif text-base italic mb-4 text-gray-700 leading-relaxed">{quote.content}</p>
+                          <div className="flex justify-between items-center text-xs text-gray-500">
+                            <cite className="not-italic font-medium border-l-2 border-[#5A5A40] pl-3 text-[#5A5A40]">— {quote.author}</cite>
+                            <div className="flex items-center gap-4">
+                              <span title="最后索引时间" className="flex items-center gap-1">
+                                <RefreshCw size={10} className="opacity-50" />
+                                {new Date(quote.last_accessed_at).toLocaleDateString()}
+                              </span>
+                              <span>{date.month} {date.day}, {date.year}</span>
+                            </div>
                           </div>
                         </div>
                       )}

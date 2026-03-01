@@ -9,6 +9,7 @@ export default defineConfig(({mode}) => {
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      'process.env.DATABASE_URL': JSON.stringify(env.DATABASE_URL || env.VITE_DATABASE_URL),
     },
     resolve: {
       alias: {
