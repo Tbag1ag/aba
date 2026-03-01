@@ -19,31 +19,17 @@ import {
   Menu,
   Search,
   Settings2,
-  Terminal
+  Globe,
+  Database,
+  CheckCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { SqlEditor } from "./components/SqlEditor";
+import { storage, type Quote, type Category } from "./services/storage";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
-}
-
-interface Quote {
-  id: number;
-  title: string;
-  content: string;
-  author: string;
-  comment: string;
-  category: string;
-  is_pinned: boolean;
-  created_at: string;
-}
-
-interface Category {
-  id: number;
-  name: string;
 }
 
 export default function App() {
@@ -59,109 +45,44 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
-  const [dbStatus, setDbStatus] = useState<{ status: string; message: string } | null>(null);
-  const [isSqlEditorOpen, setIsSqlEditorOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [storageMode, setStorageMode] = useState<'local' | 'api'>(storage.getMode());
+  const [apiBaseUrl, setApiBaseUrl] = useState(storage.getApiBase());
+  const [isLoading, setIsLoading] = useState(false);
 
   const selectedQuote = quotes.find(q => q.id === selectedQuoteId);
 
   useEffect(() => {
-    fetchQuotes();
-  }, [selectedCategory, searchQuery]);
+    fetchData();
+  }, [selectedCategory, searchQuery, storageMode]);
 
-  useEffect(() => {
-    fetchCategories();
-    checkDbStatus();
-  }, []);
-
-  const checkDbStatus = async () => {
+  const fetchData = async () => {
+    setIsLoading(true);
     try {
-      const res = await fetch("/api/health");
-      const data = await res.json();
-      setDbStatus(data);
+      const [q, c] = await Promise.all([
+        storage.getQuotes(selectedCategory, searchQuery),
+        storage.getCategories()
+      ]);
+      setQuotes(q);
+      setCategories(c);
     } catch (err) {
-      setDbStatus({ status: "error", message: "无法连接到后端服务" });
-    }
-  };
-
-  const fetchQuotes = async () => {
-    try {
-      const params = new URLSearchParams();
-      if (selectedCategory !== "全部") params.append("category", selectedCategory);
-      if (searchQuery) params.append("search", searchQuery);
-      
-      const res = await fetch(`/api/quotes?${params.toString()}`);
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      const data = await res.json();
-      setQuotes(data);
-    } catch (err: any) {
-      console.error("Failed to fetch quotes", err);
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const res = await fetch("/api/categories");
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`服务器返回错误 (${res.status}): ${text.slice(0, 100)}`);
-      }
-      
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await res.text();
-        console.error("Expected JSON but got:", text);
-        throw new Error("服务器未返回有效的 JSON 数据。请确保后端服务已正确启动。");
-      }
-
-      const data = await res.json();
-      console.log("Fetched categories:", data);
-      if (Array.isArray(data)) {
-        setCategories(data);
-      } else {
-        console.error("Categories data is not an array", data);
-      }
-    } catch (err: any) {
-      console.error("Failed to fetch categories", err);
-      alert(`无法加载分类: ${err.message}`);
+      console.error("Failed to fetch data", err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleAddQuote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newQuote.content.trim()) {
-      alert("内容不能为空");
-      return;
-    }
-
+    if (!newQuote.content.trim()) return;
     try {
-      const res = await fetch("/api/quotes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newQuote),
-      });
-      
-      if (res.ok) {
-        const added = await res.json();
-        setNewQuote({ title: "", content: "", author: "", comment: "", category: "未分类", is_pinned: false });
-        setIsAdding(false);
-        fetchQuotes();
-        setSelectedQuoteId(added.id);
-      } else {
-        const contentType = res.headers.get("content-type");
-        let errorMessage = "未知错误";
-        if (contentType && contentType.includes("application/json")) {
-          const errorData = await res.json();
-          errorMessage = errorData.error || errorMessage;
-        } else {
-          errorMessage = await res.text();
-        }
-        alert(`保存失败 (${res.status}): ${errorMessage}`);
-      }
-    } catch (err: any) {
-      console.error("Failed to add quote", err);
-      alert(`网络错误，保存失败: ${err.message || "请检查网络连接"}`);
+      const added = await storage.addQuote(newQuote);
+      setNewQuote({ title: "", content: "", author: "", comment: "", category: "未分类", is_pinned: false });
+      setIsAdding(false);
+      fetchData();
+      setSelectedQuoteId(added.id);
+    } catch (err) {
+      alert("保存失败，请检查设置");
     }
   };
 
@@ -169,110 +90,61 @@ export default function App() {
     e.preventDefault();
     const name = newCategoryName.trim();
     if (!name) return;
-    
     try {
-      const res = await fetch("/api/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      
-      if (res.ok) {
-        setNewCategoryName("");
-        fetchCategories();
-        // Optional: exit management mode or stay? Let's stay but give feedback
-      } else {
-        const data = await res.json();
-        alert(`创建分类失败: ${data.error || "该分类可能已存在"}`);
-      }
-    } catch (err: any) {
-      console.error("Failed to add category", err);
-      alert(`网络错误: ${err.message}`);
+      await storage.addCategory(name);
+      setNewCategoryName("");
+      fetchData();
+    } catch (err) {
+      alert("创建分类失败");
     }
   };
 
   const handleDeleteCategory = async (id: number, name: string) => {
-    if (name === "未分类") {
-      alert("默认分类不能删除");
-      return;
-    }
-    if (!window.confirm(`确定要删除分类 "${name}" 吗？该分类下的笔记将变为 "未分类"。`)) return;
+    if (name === "未分类") return;
+    if (!window.confirm(`确定要删除分类 "${name}" 吗？`)) return;
     try {
-      const res = await fetch(`/api/categories/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        if (selectedCategory === name) {
-          setSelectedCategory("全部");
-        } else {
-          fetchQuotes();
-        }
-        fetchCategories();
-      } else {
-        const data = await res.json();
-        alert(`删除失败: ${data.error || "未知错误"}`);
-      }
+      await storage.deleteCategory(id);
+      if (selectedCategory === name) setSelectedCategory("全部");
+      fetchData();
     } catch (err) {
-      console.error("Failed to delete category", err);
-      alert("网络错误，请稍后再试");
+      alert("删除失败");
     }
   };
 
   const handleDelete = async (id: number) => {
     if (!window.confirm("确定要删除这条笔记吗？")) return;
     try {
-      const res = await fetch(`/api/quotes/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        if (selectedQuoteId === id) setSelectedQuoteId(null);
-        fetchQuotes();
-      } else {
-        const data = await res.json();
-        alert(`删除失败: ${data.error || "未知错误"}`);
-      }
+      await storage.deleteQuote(id);
+      if (selectedQuoteId === id) setSelectedQuoteId(null);
+      fetchData();
     } catch (err) {
-      console.error("Failed to delete quote", err);
-      alert("网络错误，请稍后再试");
+      alert("删除失败");
     }
   };
 
   const handleTogglePin = async (quote: Quote) => {
     try {
-      const updatedQuote = { ...quote, is_pinned: !quote.is_pinned };
-      const res = await fetch(`/api/quotes/${quote.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedQuote),
-      });
-      if (res.ok) {
-        fetchQuotes();
-      }
+      await storage.updateQuote(quote.id, { is_pinned: !quote.is_pinned });
+      fetchData();
     } catch (err) {
-      console.error("Failed to toggle pin", err);
+      console.error(err);
     }
   };
+
   const handleUpdate = async (id: number) => {
     try {
-      const res = await fetch(`/api/quotes/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
-      });
-      if (res.ok) {
-        setEditingId(null);
-        fetchQuotes();
-      } else {
-        const contentType = res.headers.get("content-type");
-        let errorMessage = "未知错误";
-        if (contentType && contentType.includes("application/json")) {
-          const errorData = await res.json();
-          errorMessage = errorData.error || errorMessage;
-        } else {
-          errorMessage = await res.text();
-        }
-        alert(`更新失败 (${res.status}): ${errorMessage}`);
-      }
-    } catch (err: any) {
-      console.error("Failed to update quote", err);
-      alert(`网络错误，更新失败: ${err.message || "请检查网络连接"}`);
+      await storage.updateQuote(id, editForm);
+      setEditingId(null);
+      fetchData();
+    } catch (err) {
+      alert("更新失败");
     }
+  };
+
+  const saveSettings = () => {
+    storage.setMode(storageMode, apiBaseUrl);
+    setIsSettingsOpen(false);
+    fetchData();
   };
 
   const formatDate = (dateString: string) => {
@@ -286,21 +158,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#fdfcf9] text-[#2c2c2c] font-sans selection:bg-[#e6e2d3] flex flex-col">
-      {/* Database Status Banner */}
-      {dbStatus && dbStatus.status === "error" && (
-        <div className="bg-red-50 border-b border-red-100 px-6 py-2 flex items-center justify-between sticky top-0 z-[60]">
-          <div className="flex items-center gap-2 text-red-700 text-[10px] font-bold uppercase tracking-wider">
-            <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-            <span>数据库未连接: {dbStatus.message}</span>
-          </div>
-          <button 
-            onClick={checkDbStatus}
-            className="text-[10px] uppercase font-bold tracking-wider text-red-600 hover:text-red-800 underline underline-offset-2"
-          >
-            点击重试
-          </button>
-        </div>
-      )}
       {/* Header */}
       <header className="sticky top-0 z-20 bg-[#fdfcf9]/80 backdrop-blur-md border-b border-[#e6e2d3] px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
@@ -317,14 +174,21 @@ export default function App() {
               </div>
               <h1 className="text-2xl font-serif font-bold tracking-tight">读书笔记</h1>
             </div>
-            <button 
-              onClick={() => setIsSqlEditorOpen(true)}
-              className="p-2 hover:bg-[#f9f8f4] rounded-lg text-[#5A5A40] transition-colors flex items-center gap-2"
-              title="SQL 控制台"
-            >
-              <Terminal size={18} />
-              <span className="text-xs font-bold uppercase tracking-wider hidden sm:inline">SQL Editor</span>
-            </button>
+            <div className="flex items-center gap-2 ml-2">
+              <div className={cn(
+                "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                storageMode === 'local' ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"
+              )}>
+                {storageMode === 'local' ? "本地存储" : "远程 API"}
+              </div>
+              <button 
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-1.5 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors"
+                title="设置"
+              >
+                <Settings2 size={16} />
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-4 w-full md:w-auto flex-1 max-w-xl">
@@ -332,7 +196,7 @@ export default function App() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8e8e7e]" size={18} />
               <input 
                 type="text"
-                placeholder="搜索标题、内容、作者或感悟..."
+                placeholder="搜索标题、内容、作者..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-[#f9f8f4] border-none rounded-full pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-[#5A5A40]/20 transition-all"
@@ -349,39 +213,24 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar - Categories */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Sidebar */}
         <AnimatePresence>
           {isSidebarOpen && (
-            <>
-              {/* Mobile Backdrop */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setIsSidebarOpen(false)}
-                className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden"
-              />
-              <motion.nav
-                initial={{ x: -260, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: -260, opacity: 0 }}
-                className="bg-[#fdfcf9] border-r border-[#e6e2d3] overflow-y-auto fixed inset-y-0 left-0 z-40 w-[260px] md:relative md:z-10"
-              >
+            <motion.nav
+              initial={{ x: -260, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -260, opacity: 0 }}
+              className="bg-[#fdfcf9] border-r border-[#e6e2d3] overflow-y-auto w-[260px] shrink-0"
+            >
               <div className="p-6 space-y-8">
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#8e8e7e]">笔记分类</h3>
                     <button 
                       onClick={() => setIsManagingCategories(!isManagingCategories)}
-                      className={cn(
-                        "flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-all",
-                        isManagingCategories 
-                          ? "bg-amber-100 text-amber-700 border border-amber-200" 
-                          : "bg-[#f9f8f4] text-[#5A5A40] border border-[#e6e2d3] hover:bg-[#e6e2d3]"
-                      )}
+                      className="text-[10px] font-bold text-[#5A5A40] hover:underline"
                     >
-                      <Settings2 size={12} />
                       {isManagingCategories ? "完成" : "管理"}
                     </button>
                   </div>
@@ -391,45 +240,26 @@ export default function App() {
                       onClick={() => setSelectedCategory("全部")}
                       className={cn(
                         "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all",
-                        selectedCategory === "全部" 
-                          ? "bg-[#5A5A40] text-white shadow-md" 
-                          : "text-[#4a4a4a] hover:bg-[#f9f8f4]"
+                        selectedCategory === "全部" ? "bg-[#5A5A40] text-white shadow-md" : "text-[#4a4a4a] hover:bg-[#f9f8f4]"
                       )}
                     >
                       <Library size={18} />
                       全部笔记
                     </button>
-                    
-                    {categories.length === 0 && !isManagingCategories && (
-                      <div className="px-4 py-8 text-center opacity-40">
-                        <FolderOpen size={24} className="mx-auto mb-2" />
-                        <p className="text-xs italic">暂无分类</p>
-                      </div>
-                    )}
-
                     {categories.map(cat => (
                       <div key={cat.id} className="group flex items-center gap-1">
                         <button
                           onClick={() => setSelectedCategory(cat.name)}
                           className={cn(
-                            "flex-1 flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all capitalize truncate",
-                            selectedCategory === cat.name 
-                              ? "bg-[#5A5A40] text-white shadow-md" 
-                              : "text-[#4a4a4a] hover:bg-[#f9f8f4]"
+                            "flex-1 flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all truncate",
+                            selectedCategory === cat.name ? "bg-[#5A5A40] text-white shadow-md" : "text-[#4a4a4a] hover:bg-[#f9f8f4]"
                           )}
                         >
                           <Hash size={16} className="opacity-60 shrink-0" />
                           <span className="truncate">{cat.name}</span>
                         </button>
                         {isManagingCategories && cat.name !== "未分类" && (
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteCategory(cat.id, cat.name);
-                            }}
-                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                            title="删除分类"
-                          >
+                          <button onClick={() => handleDeleteCategory(cat.id, cat.name)} className="p-2 text-red-400 hover:text-red-600">
                             <Trash2 size={14} />
                           </button>
                         )}
@@ -438,48 +268,26 @@ export default function App() {
                   </div>
 
                   {isManagingCategories && (
-                    <form onSubmit={handleAddCategory} className="mt-6 p-3 bg-white rounded-2xl border border-dashed border-[#e6e2d3] space-y-3">
-                      <div className="flex items-center justify-between px-1">
-                        <div className="text-[10px] font-bold uppercase text-[#8e8e7e]">新增分类</div>
-                        <button 
-                          type="button"
-                          onClick={() => setIsManagingCategories(false)}
-                          className="text-[10px] text-[#8e8e7e] hover:text-[#2c2c2c]"
-                        >
-                          取消
-                        </button>
-                      </div>
-                      <div className="flex gap-2">
-                        <input 
-                          type="text"
-                          placeholder="输入分类名称..."
-                          value={newCategoryName}
-                          onChange={(e) => setNewCategoryName(e.target.value)}
-                          className="flex-1 bg-[#f9f8f4] border-none rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-[#5A5A40]"
-                        />
-                        <button 
-                          type="submit"
-                          className="p-2 bg-[#5A5A40] text-white rounded-lg hover:bg-[#4a4a34] transition-all active:scale-95"
-                        >
-                          <Plus size={16} />
-                        </button>
-                      </div>
+                    <form onSubmit={handleAddCategory} className="mt-4 flex gap-2">
+                      <input 
+                        type="text"
+                        placeholder="新分类..."
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        className="flex-1 bg-[#f9f8f4] border-none rounded-lg px-3 py-2 text-xs"
+                      />
+                      <button type="submit" className="p-2 bg-[#5A5A40] text-white rounded-lg"><Plus size={16} /></button>
                     </form>
                   )}
                 </div>
               </div>
             </motion.nav>
-          </>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
 
-      {/* SQL Editor Modal */}
-      <SqlEditor isOpen={isSqlEditorOpen} onClose={() => setIsSqlEditorOpen(false)} />
-
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto px-6 py-12 scroll-smooth">
+        {/* Main Content */}
+        <main className="flex-1 overflow-y-auto px-6 py-12 scroll-smooth bg-[#fdfcf9]">
           <div className="max-w-3xl mx-auto">
-            {/* Add Form */}
             <AnimatePresence>
               {isAdding && (
                 <motion.div
@@ -489,272 +297,91 @@ export default function App() {
                   className="mb-12 bg-white rounded-3xl p-8 shadow-sm border border-[#e6e2d3]"
                 >
                   <form onSubmit={handleAddQuote} className="space-y-6">
-                    <div>
-                      <label className="block text-xs uppercase tracking-widest font-semibold text-[#8e8e7e] mb-2">笔记标题</label>
+                    <input
+                      type="text"
+                      value={newQuote.title}
+                      onChange={e => setNewQuote({ ...newQuote, title: e.target.value })}
+                      placeholder="笔记标题"
+                      className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 focus:ring-2 focus:ring-[#5A5A40]/20 font-medium"
+                    />
+                    <textarea
+                      required
+                      value={newQuote.content}
+                      onChange={e => setNewQuote({ ...newQuote, content: e.target.value })}
+                      placeholder="记录触动你的文字..."
+                      className="w-full bg-[#f9f8f4] border-none rounded-2xl p-4 focus:ring-2 focus:ring-[#5A5A40]/20 min-h-[120px] font-serif text-xl italic"
+                    />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <input
                         type="text"
-                        value={newQuote.title}
-                        onChange={e => setNewQuote({ ...newQuote, title: e.target.value })}
-                        placeholder="给这则笔记起个标题..."
-                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 focus:ring-2 focus:ring-[#5A5A40]/20 font-medium"
+                        value={newQuote.author}
+                        onChange={e => setNewQuote({ ...newQuote, author: e.target.value })}
+                        placeholder="作者/出处"
+                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-xs uppercase tracking-widest font-semibold text-[#8e8e7e] mb-2">笔记内容</label>
-                      <textarea
-                        required
-                        value={newQuote.content}
-                        onChange={e => setNewQuote({ ...newQuote, content: e.target.value })}
-                        placeholder="记录下书中那些触动你的文字..."
-                        className="w-full bg-[#f9f8f4] border-none rounded-2xl p-4 focus:ring-2 focus:ring-[#5A5A40]/20 min-h-[120px] font-serif text-xl italic"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div>
-                        <label className="block text-xs uppercase tracking-widest font-semibold text-[#8e8e7e] mb-2">作者/出处</label>
-                        <input
-                          type="text"
-                          value={newQuote.author}
-                          onChange={e => setNewQuote({ ...newQuote, author: e.target.value })}
-                          placeholder="书名或作者"
-                          className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 focus:ring-2 focus:ring-[#5A5A40]/20"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs uppercase tracking-widest font-semibold text-[#8e8e7e] mb-2">分类</label>
-                        <select
-                          value={newQuote.category}
-                          onChange={e => setNewQuote({ ...newQuote, category: e.target.value })}
-                          className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 focus:ring-2 focus:ring-[#5A5A40]/20 appearance-none"
-                        >
-                          {categories.length > 0 ? (
-                            categories.map(cat => (
-                              <option key={cat.id} value={cat.name}>{cat.name}</option>
-                            ))
-                          ) : (
-                            <option value="未分类">未分类</option>
-                          )}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs uppercase tracking-widest font-semibold text-[#8e8e7e] mb-2">我的感悟</label>
-                        <input
-                          type="text"
-                          value={newQuote.comment}
-                          onChange={e => setNewQuote({ ...newQuote, comment: e.target.value })}
-                          placeholder="写下你的第一反应..."
-                          className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 focus:ring-2 focus:ring-[#5A5A40]/20"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 cursor-pointer group">
-                        <div 
-                          onClick={() => setNewQuote({ ...newQuote, is_pinned: !newQuote.is_pinned })}
-                          className={cn(
-                            "w-10 h-5 rounded-full transition-colors relative",
-                            newQuote.is_pinned ? "bg-[#5A5A40]" : "bg-[#e6e2d3]"
-                          )}
-                        >
-                          <div className={cn(
-                            "absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform",
-                            newQuote.is_pinned ? "translate-x-5" : "translate-x-0"
-                          )} />
-                        </div>
-                        <span className="text-xs font-semibold text-[#8e8e7e] uppercase tracking-widest">置顶此笔记</span>
-                      </label>
-                      <button
-                        type="submit"
-                        className="bg-[#5A5A40] text-white px-8 py-3 rounded-full font-medium hover:bg-[#4a4a34] transition-colors shadow-lg"
+                      <select
+                        value={newQuote.category}
+                        onChange={e => setNewQuote({ ...newQuote, category: e.target.value })}
+                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
                       >
-                        保存到笔记集
-                      </button>
+                        {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
+                      </select>
+                      <input
+                        type="text"
+                        value={newQuote.comment}
+                        onChange={e => setNewQuote({ ...newQuote, comment: e.target.value })}
+                        placeholder="我的感悟"
+                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit" className="bg-[#5A5A40] text-white px-8 py-3 rounded-full font-medium shadow-lg">保存笔记</button>
                     </div>
                   </form>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Quotes List */}
             <div className="space-y-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-bold uppercase tracking-widest text-[#8e8e7e] flex items-center gap-2">
-                  <FolderOpen size={14} />
-                  {selectedCategory}
-                  {searchQuery && <span className="text-[#5A5A40] lowercase font-normal"> / 搜索: {searchQuery}</span>}
-                </h2>
-                <span className="text-xs text-[#8e8e7e]">{quotes.length} 条笔记</span>
-              </div>
-              
-              {quotes.length === 0 ? (
-                <div className="text-center py-20 opacity-40">
-                  <BookOpen size={48} className="mx-auto mb-4" />
-                  <p className="font-serif italic text-lg">
-                    {searchQuery ? "未找到相关笔记" : "暂无笔记，开始你的阅读记录吧"}
-                  </p>
-                </div>
+              {isLoading ? (
+                <div className="text-center py-20 opacity-40"><Loader2 className="mx-auto animate-spin" /></div>
+              ) : quotes.length === 0 ? (
+                <div className="text-center py-20 opacity-40"><BookOpen size={48} className="mx-auto mb-4" /><p>暂无笔记</p></div>
               ) : (
                 quotes.map((quote) => {
                   const date = formatDate(quote.created_at);
                   return (
-                    <motion.article
-                      layout
-                      key={quote.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className={cn(
-                        "group relative cursor-pointer transition-all duration-300",
-                        selectedQuoteId === quote.id ? "scale-[1.02]" : "hover:scale-[1.01]"
-                      )}
-                      onClick={() => setSelectedQuoteId(quote.id)}
-                    >
-                      <div className="flex gap-6">
-                        {/* Date/Timeline */}
-                        <div className="hidden md:flex flex-col items-center pt-2 w-12">
-                          <div className="flex flex-col items-center bg-[#f9f8f4] rounded-2xl p-2 border border-[#e6e2d3] group-hover:border-[#5A5A40]/30 transition-colors">
-                            <span className="text-[10px] font-bold text-[#8e8e7e] uppercase tracking-tighter">{date.month}</span>
-                            <span className="text-xl font-serif font-bold text-[#5A5A40]">{date.day}</span>
-                            <span className="text-[8px] text-[#8e8e7e]">{date.year}</span>
+                    <motion.article layout key={quote.id} className="group bg-white rounded-[2rem] p-8 shadow-sm border border-[#e6e2d3] hover:border-[#5A5A40]/30 transition-all">
+                      {editingId === quote.id ? (
+                        <div className="space-y-4">
+                          <input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className="w-full bg-[#f9f8f4] rounded-lg p-2" />
+                          <textarea value={editForm.content} onChange={e => setEditForm({ ...editForm, content: e.target.value })} className="w-full bg-[#f9f8f4] rounded-xl p-4 font-serif italic" />
+                          <div className="flex justify-end gap-2">
+                            <button onClick={() => setEditingId(null)}>取消</button>
+                            <button onClick={() => handleUpdate(quote.id)} className="bg-[#5A5A40] text-white px-4 py-2 rounded-full">保存</button>
                           </div>
-                          <div className="w-px h-full bg-[#e6e2d3] mt-4 group-last:bg-transparent" />
                         </div>
-
-                        {/* Content Card */}
-                        <div className={cn(
-                          "flex-1 bg-white rounded-[2rem] p-8 shadow-sm border transition-all duration-300",
-                          selectedQuoteId === quote.id 
-                            ? "border-[#5A5A40] shadow-md ring-1 ring-[#5A5A40]/20" 
-                            : "border-[#e6e2d3] hover:border-[#5A5A40]/30"
-                        )}>
-                          {editingId === quote.id ? (
-                            <div className="space-y-4" onClick={e => e.stopPropagation()}>
-                              <input
-                                type="text"
-                                value={editForm.title}
-                                onChange={e => setEditForm({ ...editForm, title: e.target.value })}
-                                className="w-full bg-[#f9f8f4] border-none rounded-lg p-2 text-sm font-bold"
-                                placeholder="笔记标题"
-                              />
-                              <textarea
-                                value={editForm.content}
-                                onChange={e => setEditForm({ ...editForm, content: e.target.value })}
-                                className="w-full bg-[#f9f8f4] border-none rounded-xl p-4 font-serif text-lg italic"
-                              />
-                              <div className="grid grid-cols-2 gap-4">
-                                <input
-                                  type="text"
-                                  value={editForm.author}
-                                  onChange={e => setEditForm({ ...editForm, author: e.target.value })}
-                                  className="w-full bg-[#f9f8f4] border-none rounded-lg p-2 text-sm"
-                                  placeholder="作者/出处"
-                                />
-                                <select
-                                  value={editForm.category}
-                                  onChange={e => setEditForm({ ...editForm, category: e.target.value })}
-                                  className="w-full bg-[#f9f8f4] border-none rounded-lg p-2 text-sm"
-                                >
-                                  {categories.length > 0 ? (
-                                    categories.map(cat => (
-                                      <option key={cat.id} value={cat.name}>{cat.name}</option>
-                                    ))
-                                  ) : (
-                                    <option value="未分类">未分类</option>
-                                  )}
-                                </select>
-                              </div>
-                              <div className="flex items-center justify-between mt-2">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={editForm.is_pinned}
-                                    onChange={e => setEditForm({ ...editForm, is_pinned: e.target.checked })}
-                                    className="w-4 h-4 rounded border-[#e6e2d3] text-[#5A5A40] focus:ring-[#5A5A40]"
-                                  />
-                                  <span className="text-xs font-semibold text-[#8e8e7e] uppercase tracking-widest">置顶此笔记</span>
-                                </label>
-                                <div className="flex gap-2">
-                                  <button onClick={() => setEditingId(null)} className="px-4 py-2 text-sm">取消</button>
-                                  <button 
-                                    onClick={() => handleUpdate(quote.id)}
-                                    className="bg-[#5A5A40] text-white px-4 py-2 rounded-full text-sm flex items-center gap-2"
-                                  >
-                                    <Save size={14} /> 保存
-                                  </button>
-                                </div>
-                              </div>
+                      ) : (
+                        <div>
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="flex gap-2">
+                              <span className="text-[10px] font-bold uppercase bg-[#5A5A40]/10 px-2 py-0.5 rounded">{quote.category}</span>
+                              {quote.is_pinned && <span className="text-[10px] font-bold uppercase bg-amber-50 text-amber-600 px-2 py-0.5 rounded flex items-center gap-1"><Pin size={10} /> 置顶</span>}
                             </div>
-                          ) : (
-                            <div className="relative">
-                              <QuoteIcon className="absolute -top-4 -left-4 text-[#5A5A40]/10" size={40} />
-                              <div className="mb-3 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] bg-[#5A5A40]/10 px-2 py-0.5 rounded">
-                                    {quote.category}
-                                  </span>
-                                  {quote.is_pinned && (
-                                    <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
-                                      <Pin size={10} /> 置顶
-                                    </span>
-                                  )}
-                                </div>
-                                <span className="md:hidden text-[10px] text-[#8e8e7e] font-medium">
-                                  {date.month} {date.day}, {date.year}
-                                </span>
-                              </div>
-                              
-                              <h3 className="text-lg font-serif font-bold text-[#1a1a1a] mb-2 group-hover:text-[#5A5A40] transition-colors">
-                                {quote.title || "无标题笔记"}
-                              </h3>
-                              
-                              <p className="font-serif text-base leading-relaxed text-[#4a4a4a] mb-4 line-clamp-1 italic">
-                                {quote.content}
-                              </p>
-
-                              <div className="flex items-center justify-between">
-                                <cite className="not-italic font-medium text-[#5A5A40] text-sm border-l-2 border-[#5A5A40] pl-3">
-                                  — {quote.author || "未知"}
-                                </cite>
-                                <div className="flex gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10 relative">
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleTogglePin(quote);
-                                    }}
-                                    className={cn(
-                                      "p-2 hover:bg-[#f9f8f4] rounded-full transition-colors",
-                                      quote.is_pinned ? "text-amber-500" : "text-[#8e8e7e] hover:text-[#5A5A40]"
-                                    )}
-                                    title={quote.is_pinned ? "取消置顶" : "置顶"}
-                                  >
-                                    {quote.is_pinned ? <PinOff size={18} /> : <Pin size={18} />}
-                                  </button>
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingId(quote.id);
-                                      setEditForm({ title: quote.title, content: quote.content, author: quote.author, comment: quote.comment, category: quote.category, is_pinned: quote.is_pinned });
-                                    }}
-                                    className="p-2 hover:bg-[#f9f8f4] rounded-full text-[#8e8e7e] hover:text-[#5A5A40] transition-colors"
-                                    title="编辑"
-                                  >
-                                    <Edit3 size={18} />
-                                  </button>
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDelete(quote.id);
-                                    }}
-                                    className="p-2 hover:bg-red-50 rounded-full text-[#8e8e7e] hover:text-red-500 transition-colors"
-                                    title="删除"
-                                  >
-                                    <Trash2 size={18} />
-                                  </button>
-                                </div>
-                              </div>
+                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => handleTogglePin(quote)} className={quote.is_pinned ? "text-amber-500" : "text-gray-400"}><Pin size={16} /></button>
+                              <button onClick={() => { setEditingId(quote.id); setEditForm(quote); }} className="text-gray-400"><Edit3 size={16} /></button>
+                              <button onClick={() => handleDelete(quote.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
                             </div>
-                          )}
+                          </div>
+                          <h3 className="text-lg font-serif font-bold mb-2">{quote.title}</h3>
+                          <p className="font-serif text-base italic mb-4 text-[#4a4a4a]">{quote.content}</p>
+                          <div className="flex justify-between items-center text-xs text-[#8e8e7e]">
+                            <cite className="not-italic font-medium border-l-2 border-[#5A5A40] pl-3">— {quote.author}</cite>
+                            <span>{date.month} {date.day}, {date.year}</span>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </motion.article>
                   );
                 })
@@ -763,121 +390,54 @@ export default function App() {
           </div>
         </main>
 
-        {/* Standalone Sidebar */}
+        {/* Sidebar for Details */}
         <AnimatePresence>
           {selectedQuoteId && selectedQuote && (
-            <>
-              {/* Mobile Backdrop */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setSelectedQuoteId(null)}
-                className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden"
-              />
-              
-              <motion.aside
-                initial={{ x: "100%" }}
-                animate={{ x: 0 }}
-                exit={{ x: "100%" }}
-                transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="fixed inset-y-0 right-0 w-full md:w-[400px] lg:w-[500px] bg-white shadow-2xl z-40 flex flex-col md:relative md:z-10 md:shadow-none md:border-l md:border-[#e6e2d3]"
-              >
-                <div className="p-6 border-b border-[#e6e2d3] flex justify-between items-center bg-[#fdfcf9]">
-                  <div className="flex items-center gap-2 text-[#5A5A40]">
-                    <MessageSquare size={18} />
-                    <h2 className="font-bold text-sm uppercase tracking-widest">参阅感悟</h2>
-                  </div>
-                  <button 
-                    onClick={() => setSelectedQuoteId(null)}
-                    className="p-2 hover:bg-[#f9f8f4] rounded-full text-[#8e8e7e] transition-colors"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-8 space-y-10 scroll-smooth">
-                  {/* Quote Context in Sidebar */}
-                  <div className="space-y-4">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e]">正在参阅</div>
-                    <h3 className="text-xl font-serif font-bold text-[#1a1a1a] mb-2">
-                      {selectedQuote.title || "无标题笔记"}
-                    </h3>
-                    <blockquote className="font-serif text-xl italic text-[#1a1a1a] border-l-4 border-[#5A5A40] pl-6 leading-relaxed">
-                      “{selectedQuote.content}”
-                    </blockquote>
-                    <div className="text-sm font-medium text-[#5A5A40] pl-6">— {selectedQuote.author || "佚名"}</div>
-                  </div>
-
-                  {/* User Comment */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e]">我的感悟</div>
-                      <button 
-                        onClick={() => {
-                          setEditingId(selectedQuote.id);
-                          setEditForm({ title: selectedQuote.title, content: selectedQuote.content, author: selectedQuote.author, comment: selectedQuote.comment, category: selectedQuote.category, is_pinned: selectedQuote.is_pinned });
-                        }}
-                        className="flex items-center gap-1 text-[10px] text-[#5A5A40] hover:underline font-bold"
-                      >
-                        <Edit3 size={10} />
-                        编辑感悟
-                      </button>
-                    </div>
-                    {editingId === selectedQuote.id ? (
-                      <div className="space-y-3">
-                        <textarea
-                          autoFocus
-                          value={editForm.comment}
-                          onChange={e => setEditForm({ ...editForm, comment: e.target.value })}
-                          className="w-full bg-[#f9f8f4] border-none rounded-2xl p-5 text-sm min-h-[150px] focus:ring-2 focus:ring-[#5A5A40]/10 transition-all"
-                          placeholder="在这里记录你的思考、感悟或联想..."
-                        />
-                        <div className="flex justify-end gap-3">
-                          <button onClick={() => setEditingId(null)} className="text-xs px-4 py-2 text-[#8e8e7e] hover:text-[#2c2c2c]">取消</button>
-                          <button 
-                            onClick={() => handleUpdate(selectedQuote.id)}
-                            className="bg-[#5A5A40] text-white px-6 py-2 rounded-full text-xs font-bold shadow-md active:scale-95 transition-all"
-                          >
-                            保存感悟
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="bg-[#fdfcf9] p-8 rounded-[2rem] border border-[#f0eee6] shadow-inner relative group/comment">
-                        {selectedQuote.comment ? (
-                          <p className="text-[#2c2c2c] text-base leading-relaxed italic font-serif">
-                            {selectedQuote.comment}
-                          </p>
-                        ) : (
-                          <div className="text-center py-4">
-                            <p className="text-[#8e8e7e] text-sm italic opacity-60 mb-4">
-                              尚未记录感悟...
-                            </p>
-                            <button 
-                              onClick={() => {
-                                setEditingId(selectedQuote.id);
-                                setEditForm({ title: selectedQuote.title, content: selectedQuote.content, author: selectedQuote.author, comment: selectedQuote.comment, category: selectedQuote.category, is_pinned: selectedQuote.is_pinned });
-                              }}
-                              className="text-xs text-[#5A5A40] border border-[#5A5A40]/20 px-4 py-2 rounded-full hover:bg-[#5A5A40] hover:text-white transition-all"
-                            >
-                              立即记录
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="p-6 bg-[#fdfcf9] border-t border-[#e6e2d3] text-[10px] text-center text-[#8e8e7e] uppercase tracking-widest font-bold">
-                  智慧如泉 • 常流不息
-                </div>
-              </motion.aside>
-            </>
+            <motion.aside
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              className="fixed inset-y-0 right-0 w-full md:w-[400px] bg-white shadow-2xl z-50 flex flex-col border-l border-[#e6e2d3]"
+            >
+              <div className="p-6 border-b flex justify-between items-center">
+                <h2 className="font-bold text-sm uppercase tracking-widest">参阅感悟</h2>
+                <button onClick={() => setSelectedQuoteId(null)}><X size={20} /></button>
+              </div>
+              <div className="p-8 space-y-6 overflow-y-auto">
+                <div className="bg-[#f9f8f4] p-6 rounded-2xl border border-[#e6e2d3] italic font-serif text-lg">"{selectedQuote.content}"</div>
+                <div><h4 className="text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">我的感悟</h4><p className="text-[#4a4a4a] leading-relaxed">{selectedQuote.comment || "暂无感悟..."}</p></div>
+              </div>
+            </motion.aside>
           )}
         </AnimatePresence>
       </div>
+
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-8 space-y-6">
+              <div className="flex justify-between items-center"><h2 className="text-xl font-serif font-bold">应用设置</h2><button onClick={() => setIsSettingsOpen(false)}><X size={20} /></button></div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#8e8e7e] mb-2">存储模式</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => setStorageMode('local')} className={cn("flex items-center justify-center gap-2 p-3 rounded-xl border transition-all", storageMode === 'local' ? "bg-[#5A5A40] text-white border-[#5A5A40]" : "bg-white border-[#e6e2d3] hover:bg-[#f9f8f4]")}><Database size={16} /> 本地存储</button>
+                    <button onClick={() => setStorageMode('api')} className={cn("flex items-center justify-center gap-2 p-3 rounded-xl border transition-all", storageMode === 'api' ? "bg-[#5A5A40] text-white border-[#5A5A40]" : "bg-white border-[#e6e2d3] hover:bg-[#f9f8f4]")}><Globe size={16} /> 远程 API</button>
+                  </div>
+                </div>
+                {storageMode === 'api' && (
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-[#8e8e7e] mb-2">API 基础地址</label>
+                    <input type="text" value={apiBaseUrl} onChange={(e) => setApiBaseUrl(e.target.value)} className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm" placeholder="https://your-api.com/api" />
+                  </div>
+                )}
+              </div>
+              <button onClick={saveSettings} className="w-full bg-[#5A5A40] text-white py-3 rounded-xl font-medium shadow-lg hover:bg-[#4a4a34] transition-all">保存并刷新</button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
