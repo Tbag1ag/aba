@@ -7,6 +7,7 @@ export interface Quote {
   author: string;
   comment: string;
   category: string;
+  source_url: string;
   is_pinned: boolean;
   confidence: number;
   last_accessed_at: string;
@@ -156,8 +157,8 @@ class StorageService {
     const now = new Date().toISOString();
     if (this.sql) {
       const result = await this.sql`
-        INSERT INTO quotes (title, content, author, comment, category, is_pinned, confidence, last_accessed_at) 
-        VALUES (${quote.title}, ${quote.content}, ${quote.author}, ${quote.comment}, ${quote.category}, ${quote.is_pinned}, 0.7, ${now}) 
+        INSERT INTO quotes (title, content, author, comment, category, source_url, is_pinned, confidence, last_accessed_at) 
+        VALUES (${quote.title}, ${quote.content}, ${quote.author}, ${quote.comment}, ${quote.category}, ${quote.source_url}, ${quote.is_pinned}, 0.7, ${now}) 
         RETURNING *
       `;
       return result[0] as Quote;
@@ -176,8 +177,8 @@ class StorageService {
       const result = await this.sql`
         UPDATE quotes 
         SET title = ${updated.title}, content = ${updated.content}, author = ${updated.author}, 
-            comment = ${updated.comment}, category = ${updated.category}, is_pinned = ${updated.is_pinned},
-            confidence = ${updated.confidence}, last_accessed_at = ${updated.last_accessed_at}
+            comment = ${updated.comment}, category = ${updated.category}, source_url = ${updated.source_url},
+            is_pinned = ${updated.is_pinned}, confidence = ${updated.confidence}, last_accessed_at = ${updated.last_accessed_at}
         WHERE id = ${id}
         RETURNING *
       `;
@@ -271,12 +272,12 @@ class StorageService {
       // Import quotes
       for (const q of data.quotes) {
         await this.sql`
-          INSERT INTO quotes (id, title, content, author, comment, category, is_pinned, confidence, last_accessed_at, created_at)
-          VALUES (${q.id}, ${q.title}, ${q.content}, ${q.author}, ${q.comment}, ${q.category}, ${q.is_pinned}, ${q.confidence || 0.7}, ${q.last_accessed_at || q.created_at}, ${q.created_at})
+          INSERT INTO quotes (id, title, content, author, comment, category, source_url, is_pinned, confidence, last_accessed_at, created_at)
+          VALUES (${q.id}, ${q.title}, ${q.content}, ${q.author}, ${q.comment}, ${q.category}, ${q.source_url || ''}, ${q.is_pinned}, ${q.confidence || 0.7}, ${q.last_accessed_at || q.created_at}, ${q.created_at})
           ON CONFLICT (id) DO UPDATE SET 
             title = EXCLUDED.title, content = EXCLUDED.content, author = EXCLUDED.author,
-            comment = EXCLUDED.comment, category = EXCLUDED.category, is_pinned = EXCLUDED.is_pinned,
-            confidence = EXCLUDED.confidence, last_accessed_at = EXCLUDED.last_accessed_at
+            comment = EXCLUDED.comment, category = EXCLUDED.category, source_url = EXCLUDED.source_url,
+            is_pinned = EXCLUDED.is_pinned, confidence = EXCLUDED.confidence, last_accessed_at = EXCLUDED.last_accessed_at
         `;
       }
     } else {
@@ -287,5 +288,6 @@ class StorageService {
 }
 
 export const storage = new StorageService();
+
 
 

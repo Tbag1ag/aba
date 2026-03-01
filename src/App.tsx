@@ -46,9 +46,9 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>("全部");
   const [searchQuery, setSearchQuery] = useState("");
   const [isAdding, setIsAdding] = useState(false);
-  const [newQuote, setNewQuote] = useState({ title: "", content: "", author: "", comment: "", category: "未分类", is_pinned: false });
+  const [newQuote, setNewQuote] = useState({ title: "", content: "", author: "", comment: "", category: "未分类", source_url: "", is_pinned: false });
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ title: "", content: "", author: "", comment: "", category: "", is_pinned: false });
+  const [editForm, setEditForm] = useState({ title: "", content: "", author: "", comment: "", category: "", source_url: "", is_pinned: false });
   const [selectedQuoteId, setSelectedQuoteId] = useState<number | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isManagingCategories, setIsManagingCategories] = useState(false);
@@ -56,8 +56,15 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isEditingSidebar, setIsEditingSidebar] = useState(false);
 
   const selectedQuote = quotes.find(q => q.id === selectedQuoteId);
+
+  useEffect(() => {
+    if (selectedQuote && !isEditingSidebar) {
+      setEditForm(selectedQuote);
+    }
+  }, [selectedQuoteId, isEditingSidebar]);
 
   useEffect(() => {
     fetchData();
@@ -129,7 +136,7 @@ export default function App() {
     if (!newQuote.content.trim()) return;
     try {
       const added = await storage.addQuote(newQuote);
-      setNewQuote({ title: "", content: "", author: "", comment: "", category: "未分类", is_pinned: false });
+      setNewQuote({ title: "", content: "", author: "", comment: "", category: "未分类", source_url: "", is_pinned: false });
       setIsAdding(false);
       fetchData();
       setSelectedQuoteId(added.id);
@@ -204,6 +211,7 @@ export default function App() {
     try {
       await storage.updateQuote(id, editForm);
       setEditingId(null);
+      setIsEditingSidebar(false);
       fetchData();
     } catch (err) {
       alert("更新失败");
@@ -385,9 +393,9 @@ export default function App() {
                       value={newQuote.content}
                       onChange={e => setNewQuote({ ...newQuote, content: e.target.value })}
                       placeholder="记录触动你的文字..."
-                      className="w-full bg-[#f9f8f4] border-none rounded-2xl p-4 focus:ring-2 focus:ring-[#5A5A40]/20 min-h-[120px] font-serif text-xl italic"
+                      className="w-full bg-[#f9f8f4] border-none rounded-2xl p-4 focus:ring-2 focus:ring-[#5A5A40]/20 min-h-[120px] font-sans text-lg leading-relaxed"
                     />
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <input
                         type="text"
                         value={newQuote.author}
@@ -402,6 +410,15 @@ export default function App() {
                       >
                         {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
                       </select>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <input
+                        type="text"
+                        value={newQuote.source_url}
+                        onChange={e => setNewQuote({ ...newQuote, source_url: e.target.value })}
+                        placeholder="原文链接 (可选)"
+                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
+                      />
                       <input
                         type="text"
                         value={newQuote.comment}
@@ -471,10 +488,23 @@ export default function App() {
                               <button onClick={(e) => { e.stopPropagation(); handleDelete(quote.id); }} className="p-2 bg-white/80 hover:bg-white rounded-full shadow-sm text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
                             </div>
                           </div>
-                          <h3 className="text-lg font-serif font-bold mb-2 text-gray-900">{quote.title}</h3>
-                          <p className="font-serif text-base italic mb-4 text-gray-700 leading-relaxed">{quote.content}</p>
+                          <h3 className="text-lg font-sans font-bold mb-2 text-gray-900 tracking-tight">{quote.title}</h3>
+                          <p className="font-sans text-base mb-4 text-gray-700 leading-relaxed whitespace-pre-wrap">{quote.content}</p>
                           <div className="flex justify-between items-center text-xs text-gray-500">
-                            <cite className="not-italic font-medium border-l-2 border-[#5A5A40] pl-3 text-[#5A5A40]">— {quote.author}</cite>
+                            <div className="flex flex-col gap-1">
+                              <cite className="not-italic font-medium border-l-2 border-[#5A5A40] pl-3 text-[#5A5A40]">— {quote.author}</cite>
+                              {quote.source_url && (
+                                <a 
+                                  href={quote.source_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="text-emerald-600 hover:underline ml-3 flex items-center gap-1"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  <Globe size={10} /> 原文链接
+                                </a>
+                              )}
+                            </div>
                             <div className="flex items-center gap-4">
                               <span title="最后索引时间" className="flex items-center gap-1">
                                 <RefreshCw size={10} className="opacity-50" />
@@ -500,15 +530,121 @@ export default function App() {
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
-              className="fixed inset-y-0 right-0 w-full md:w-[400px] bg-white shadow-2xl z-50 flex flex-col border-l border-[#e6e2d3]"
+              className="fixed inset-y-0 right-0 w-full md:w-[450px] bg-white shadow-2xl z-50 flex flex-col border-l border-[#e6e2d3]"
             >
-              <div className="p-6 border-b flex justify-between items-center">
-                <h2 className="font-bold text-sm uppercase tracking-widest">参阅感悟</h2>
-                <button onClick={() => setSelectedQuoteId(null)}><X size={20} /></button>
+              <div className="p-6 border-b flex justify-between items-center bg-[#fdfcf9]">
+                <div className="flex items-center gap-3">
+                  <h2 className="font-bold text-sm uppercase tracking-widest">参阅感悟</h2>
+                  {isEditingSidebar ? (
+                    <button onClick={() => handleUpdate(selectedQuote.id)} className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 text-xs font-bold">
+                      <Save size={14} /> 保存修改
+                    </button>
+                  ) : (
+                    <button onClick={() => setIsEditingSidebar(true)} className="text-[#8e8e7e] hover:text-[#5A5A40] flex items-center gap-1 text-xs font-bold">
+                      <Edit3 size={14} /> 编辑
+                    </button>
+                  )}
+                </div>
+                <button onClick={() => { setSelectedQuoteId(null); setIsEditingSidebar(false); }}><X size={20} /></button>
               </div>
-              <div className="p-8 space-y-6 overflow-y-auto">
-                <div className="bg-[#f9f8f4] p-6 rounded-2xl border border-[#e6e2d3] italic font-serif text-lg">"{selectedQuote.content}"</div>
-                <div><h4 className="text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">我的感悟</h4><p className="text-[#4a4a4a] leading-relaxed">{selectedQuote.comment || "暂无感悟..."}</p></div>
+              <div className="p-8 space-y-8 overflow-y-auto flex-1">
+                {isEditingSidebar ? (
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">标题</label>
+                      <input 
+                        type="text" 
+                        value={editForm.title} 
+                        onChange={e => setEditForm({ ...editForm, title: e.target.value })}
+                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">内容 (支持换行)</label>
+                      <textarea 
+                        value={editForm.content} 
+                        onChange={e => setEditForm({ ...editForm, content: e.target.value })}
+                        className="w-full bg-[#f9f8f4] border-none rounded-2xl p-4 text-sm font-sans leading-relaxed min-h-[150px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">作者/出处</label>
+                      <input 
+                        type="text" 
+                        value={editForm.author} 
+                        onChange={e => setEditForm({ ...editForm, author: e.target.value })}
+                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">原文链接</label>
+                      <input 
+                        type="text" 
+                        value={editForm.source_url} 
+                        onChange={e => setEditForm({ ...editForm, source_url: e.target.value })}
+                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-[#8e8e7e] mb-2">我的感悟</label>
+                      <textarea 
+                        value={editForm.comment} 
+                        onChange={e => setEditForm({ ...editForm, comment: e.target.value })}
+                        className="w-full bg-[#f9f8f4] border-none rounded-2xl p-4 text-sm min-h-[100px]"
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-4">
+                      <button 
+                        onClick={() => handleUpdate(selectedQuote.id)}
+                        className="flex-1 bg-[#5A5A40] text-white py-3 rounded-xl font-bold shadow-lg"
+                      >
+                        确认修改
+                      </button>
+                      <button 
+                        onClick={() => setIsEditingSidebar(false)}
+                        className="flex-1 bg-[#f9f8f4] text-[#8e8e7e] py-3 rounded-xl font-bold"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    <div className="space-y-4">
+                      <h3 className="text-2xl font-sans font-bold text-gray-900 leading-tight tracking-tight">{selectedQuote.title}</h3>
+                      <div className="bg-[#f9f8f4] p-8 rounded-[2rem] border border-[#e6e2d3] font-sans text-lg text-gray-800 leading-relaxed whitespace-pre-wrap shadow-inner">
+                        {selectedQuote.content}
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <cite className="not-italic font-medium text-[#5A5A40]">— {selectedQuote.author}</cite>
+                        {selectedQuote.source_url && (
+                          <a href={selectedQuote.source_url} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline flex items-center gap-1">
+                            <Globe size={14} /> 查看原文
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="pt-8 border-t border-[#e6e2d3]">
+                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-4">我的感悟</h4>
+                      <div className="text-gray-700 leading-relaxed whitespace-pre-wrap text-base">
+                        {selectedQuote.comment || "暂无感悟..."}
+                      </div>
+                    </div>
+
+                    <div className="pt-8 border-t border-[#e6e2d3] grid grid-cols-2 gap-4">
+                      <div>
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-1">分类</h4>
+                        <p className="text-sm font-medium">{selectedQuote.category}</p>
+                      </div>
+                      <div>
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-1">创建时间</h4>
+                        <p className="text-sm font-medium">{new Date(selectedQuote.created_at).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.aside>
           )}
