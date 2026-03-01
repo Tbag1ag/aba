@@ -298,14 +298,28 @@ export default function App() {
       </header>
 
       <div className="flex-1 flex overflow-hidden relative">
+        {/* Sidebar Backdrop for Mobile */}
+        <AnimatePresence>
+          {isSidebarOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSidebarOpen(false)}
+              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 lg:hidden"
+            />
+          )}
+        </AnimatePresence>
+
         {/* Sidebar */}
         <AnimatePresence>
           {isSidebarOpen && (
             <motion.nav
-              initial={{ x: -260, opacity: 0 }}
+              initial={{ x: -280, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -260, opacity: 0 }}
-              className="bg-[#fdfcf9] border-r border-[#e6e2d3] overflow-y-auto w-[260px] shrink-0"
+              exit={{ x: -280, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed lg:relative inset-y-0 left-0 z-40 bg-[#fdfcf9] border-r border-[#e6e2d3] overflow-y-auto w-[280px] shrink-0 shadow-2xl lg:shadow-none"
             >
               <div className="p-6 space-y-8">
                 <div>
@@ -370,7 +384,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto px-6 py-12 scroll-smooth bg-[#fdfcf9]">
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 sm:py-12 scroll-smooth bg-[#fdfcf9]">
           <div className="max-w-3xl mx-auto">
             <AnimatePresence>
               {isAdding && (
@@ -378,7 +392,7 @@ export default function App() {
                   initial={{ opacity: 0, y: -20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className="mb-12 bg-white rounded-3xl p-8 shadow-sm border border-[#e6e2d3]"
+                  className="mb-8 sm:mb-12 bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-sm border border-[#e6e2d3]"
                 >
                   <form onSubmit={handleAddQuote} className="space-y-6">
                     <input
@@ -449,7 +463,7 @@ export default function App() {
                       layout 
                       key={quote.id} 
                       className={cn(
-                        "group rounded-[2rem] p-8 shadow-sm border transition-all duration-500",
+                        "group rounded-2xl sm:rounded-[2rem] p-5 sm:p-8 shadow-sm border transition-all duration-500",
                         state.cardBg,
                         selectedQuoteId === quote.id ? "ring-2 ring-[#5A5A40]/30 shadow-md" : "hover:shadow-md"
                       )}
@@ -467,7 +481,7 @@ export default function App() {
                       ) : (
                         <div>
                           <div className="flex justify-between items-start mb-4">
-                            <div className="flex gap-2 items-center">
+                            <div className="flex flex-wrap gap-2 items-center">
                               <span className="text-[10px] font-bold uppercase bg-black/5 px-2 py-0.5 rounded text-[#5A5A40]">{quote.category}</span>
                               <div className={cn("flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded shadow-sm", state.bg, state.color)}>
                                 {state.icon}
@@ -475,7 +489,7 @@ export default function App() {
                               </div>
                               {quote.is_pinned && <span className="text-[10px] font-bold uppercase bg-amber-50 text-amber-600 px-2 py-0.5 rounded flex items-center gap-1 shadow-sm"><Pin size={10} /> 置顶</span>}
                             </div>
-                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex gap-1 sm:gap-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleBoost(quote.id); }} 
                                 className="p-2 bg-white/80 hover:bg-white rounded-full text-emerald-600 shadow-sm transition-all hover:scale-110 active:scale-90"
@@ -532,12 +546,12 @@ export default function App() {
               exit={{ x: "100%" }}
               className="fixed inset-y-0 right-0 w-full md:w-[450px] bg-white shadow-2xl z-50 flex flex-col border-l border-[#e6e2d3]"
             >
-              <div className="p-6 border-b flex justify-between items-center bg-[#fdfcf9]">
+              <div className="p-6 border-b flex justify-between items-center bg-[#fdfcf9] sticky top-0 z-10">
                 <div className="flex items-center gap-3">
                   <h2 className="font-bold text-sm uppercase tracking-widest">参阅感悟</h2>
                   {isEditingSidebar ? (
                     <button onClick={() => handleUpdate(selectedQuote.id)} className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 text-xs font-bold">
-                      <Save size={14} /> 保存修改
+                      <Save size={14} /> 保存
                     </button>
                   ) : (
                     <button onClick={() => setIsEditingSidebar(true)} className="text-[#8e8e7e] hover:text-[#5A5A40] flex items-center gap-1 text-xs font-bold">
@@ -545,9 +559,9 @@ export default function App() {
                     </button>
                   )}
                 </div>
-                <button onClick={() => { setSelectedQuoteId(null); setIsEditingSidebar(false); }}><X size={20} /></button>
+                <button onClick={() => { setSelectedQuoteId(null); setIsEditingSidebar(false); }} className="p-2 hover:bg-black/5 rounded-full transition-colors"><X size={20} /></button>
               </div>
-              <div className="p-8 space-y-8 overflow-y-auto flex-1">
+              <div className="p-5 sm:p-8 space-y-6 sm:space-y-8 overflow-y-auto flex-1">
                 {isEditingSidebar ? (
                   <div className="space-y-6">
                     <div>
