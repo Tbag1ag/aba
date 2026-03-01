@@ -18,13 +18,28 @@ export interface Category {
 
 // Get the database URL from environment variables
 // Note: In Vite, variables must be prefixed with VITE_ to be accessible in the browser
-const DATABASE_URL = (import.meta as any).env.VITE_DATABASE_URL;
+const getDatabaseUrl = () => {
+  try {
+    return (import.meta as any).env?.VITE_DATABASE_URL;
+  } catch (e) {
+    return undefined;
+  }
+};
+
+const DATABASE_URL = getDatabaseUrl();
 
 class StorageService {
-  private sql = DATABASE_URL ? neon(DATABASE_URL) : null;
+  private sql: any = null;
 
   constructor() {
-    if (!DATABASE_URL) {
+    if (DATABASE_URL) {
+      try {
+        this.sql = neon(DATABASE_URL);
+      } catch (e) {
+        console.error("Failed to initialize Neon:", e);
+        this.sql = null;
+      }
+    } else {
       console.warn("VITE_DATABASE_URL is not set. Falling back to LocalStorage.");
     }
   }
