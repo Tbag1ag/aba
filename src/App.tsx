@@ -334,6 +334,21 @@ export default function App() {
             isOpen={isSidebarOpen} 
           />
         </nav>
+
+        <div className="p-4 border-t border-border space-y-1">
+          <button 
+            onClick={handleExport}
+            className="w-full flex items-center gap-3 p-3 rounded-2xl text-muted hover:text-accent hover:bg-app-bg transition-all"
+          >
+            <Download size={20} />
+            {isSidebarOpen && <span className="text-sm font-bold">Export Data</span>}
+          </button>
+          <label className="w-full flex items-center gap-3 p-3 rounded-2xl text-muted hover:text-accent hover:bg-app-bg transition-all cursor-pointer">
+            <Upload size={20} />
+            {isSidebarOpen && <span className="text-sm font-bold">Import Data</span>}
+            <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+          </label>
+        </div>
       </aside>
 
       {/* Main Content */}
