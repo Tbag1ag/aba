@@ -57,6 +57,10 @@ export default function App() {
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "confidence">("newest");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
+  const [heroQuoteId, setHeroQuoteId] = useState<number | null>(() => {
+    const saved = localStorage.getItem('heroQuoteId');
+    return saved ? parseInt(saved) : null;
+  });
   const [isAdding, setIsAdding] = useState(false);
   const [newQuote, setNewQuote] = useState({ title: "", content: "", author: "", comment: "", category: "未分类", source_url: "", is_pinned: false });
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -73,11 +77,17 @@ export default function App() {
   const selectedQuote = quotes.find(q => q.id === selectedQuoteId);
 
   const sortedQuotes = [...quotes].sort((a, b) => {
+    // 1. Pinned notes always on top
+    if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+
+    // 2. Then apply the selected sort
     if (sortBy === "newest") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     if (sortBy === "confidence") return b.confidence - a.confidence;
     return 0;
   });
+
+  const heroQuote = quotes.find(q => q.id === heroQuoteId) || sortedQuotes[0];
 
   const totalPages = Math.ceil(sortedQuotes.length / itemsPerPage);
   const paginatedQuotes = sortedQuotes.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -228,6 +238,11 @@ export default function App() {
     }
   };
 
+  const handleSetHero = (id: number) => {
+    setHeroQuoteId(id);
+    localStorage.setItem('heroQuoteId', id.toString());
+  };
+
   const handleBoost = async (id: number) => {
     try {
       await storage.boostKnowledge(id);
@@ -266,10 +281,23 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-app-bg text-accent font-sans flex overflow-hidden">
+    <div className="min-h-screen bg-app-bg text-accent font-sans flex overflow-hidden relative">
+      {/* Sidebar Backdrop for Mobile */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-accent/20 backdrop-blur-sm z-30 lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
       <aside className={cn(
-        "fixed lg:relative inset-y-0 left-0 z-40 bg-white border-r border-border w-[280px] shrink-0 transition-transform duration-300 flex flex-col",
+        "fixed lg:relative inset-y-0 left-0 z-40 bg-white border-r border-border w-[280px] shrink-0 transition-transform duration-300 flex flex-col shadow-2xl lg:shadow-none",
         !isSidebarOpen && "-translate-x-full lg:translate-x-0 lg:w-[80px]"
       )}>
         <div className="p-6 flex items-center gap-3 mb-8">
@@ -354,62 +382,60 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         {/* Top Bar */}
-        <header className="h-20 px-8 flex items-center justify-between shrink-0 bg-app-bg/80 backdrop-blur-md sticky top-0 z-30">
-          <div className="flex items-center gap-4 flex-1 max-w-xl">
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-white rounded-xl transition-colors lg:hidden">
+        <header className="h-20 px-4 md:px-8 flex items-center justify-between shrink-0 bg-app-bg/80 backdrop-blur-md sticky top-0 z-30">
+          <div className="flex items-center gap-2 md:gap-4 flex-1 max-w-xl">
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-white rounded-xl transition-colors lg:hidden shrink-0">
               <Menu size={20} />
             </button>
             <div className="relative flex-1 group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-accent transition-colors" size={18} />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-accent transition-colors" size={16} />
               <input 
                 type="text"
-                placeholder="Search notes, authors, books..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/50 border-none rounded-2xl pl-12 pr-4 py-3 text-sm focus:ring-2 focus:ring-accent/5 transition-all outline-none"
+                className="w-full bg-white border-none rounded-2xl pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-accent/5 transition-all outline-none"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 ml-2">
             <button 
               onClick={() => setIsAdding(true)}
-              className="bg-accent text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
+              className="bg-accent text-white p-3 md:px-6 md:py-3 rounded-2xl font-bold text-sm shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
             >
               <Plus size={18} />
-              <span>New Note</span>
+              <span className="hidden md:inline">New Note</span>
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-8 pb-32 custom-scrollbar">
-          <div className="max-w-7xl mx-auto space-y-8">
+        <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-32 custom-scrollbar">
+          <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
             {currentView === "dashboard" && (
               <>
                 {/* Hero Section */}
-                {!searchQuery && selectedCategory === "全部" && quotes.length > 0 && (
-                  <section className="relative bg-white rounded-[40px] p-8 md:p-12 overflow-hidden card-shadow group border-2 border-accent/5">
-                    <div className="relative z-10 max-w-2xl space-y-6">
+                {!searchQuery && selectedCategory === "全部" && heroQuote && (
+                  <section className="relative bg-white rounded-[32px] md:rounded-[40px] p-6 md:p-12 overflow-hidden card-shadow group border-2 border-accent/5">
+                    <div className="relative z-10 max-w-2xl space-y-4 md:space-y-6">
                       <div className="flex gap-2">
-                        <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider">Featured</span>
-                        <span className="px-3 py-1 rounded-full bg-purple-50 text-purple-600 text-[10px] font-bold uppercase tracking-wider">Latest</span>
+                        <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider">Featured</span>
                       </div>
-                      <div className="space-y-4">
-                        <h2 className="text-4xl md:text-6xl font-display font-black leading-tight text-accent">
-                          {quotes[0].title || "Untitled Note"}
+                      <div className="space-y-2 md:space-y-4">
+                        <h2 className="text-3xl md:text-6xl font-display font-black leading-tight text-accent">
+                          {heroQuote.title || "Untitled Note"}
                         </h2>
-                        <p className="text-muted text-xl line-clamp-3 leading-relaxed whitespace-pre-wrap">
-                          {quotes[0].content}
+                        <p className="text-muted text-base md:text-xl line-clamp-3 leading-relaxed whitespace-pre-wrap">
+                          {heroQuote.content}
                         </p>
                       </div>
-                      <div className="flex items-center gap-4 pt-4">
+                      <div className="flex items-center gap-4 pt-2 md:pt-4">
                         <button 
-                          onClick={() => setSelectedQuoteId(quotes[0].id)}
-                          className="bg-accent text-white px-10 py-5 rounded-2xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xl"
+                          onClick={() => setSelectedQuoteId(heroQuote.id)}
+                          className="bg-accent text-white px-6 py-3 md:px-10 md:py-5 rounded-xl md:rounded-2xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xl text-sm md:text-base"
                         >
                           Read Note
                         </button>
-                        <button className="text-accent font-bold hover:underline">View details</button>
                       </div>
                     </div>
                   </section>
@@ -527,8 +553,8 @@ export default function App() {
 
         {/* Floating Pagination Bar */}
         {totalPages > 1 && currentView === "dashboard" && (
-          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40">
-            <div className="bg-accent text-white px-2 py-2 rounded-2xl flex items-center gap-1 shadow-2xl border border-white/10 glass">
+          <div className="fixed bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] md:w-auto max-w-lg">
+            <div className="bg-accent text-white px-2 py-2 rounded-2xl flex items-center justify-between md:justify-start gap-1 shadow-2xl border border-white/10 glass">
               <button 
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
@@ -537,13 +563,13 @@ export default function App() {
                 <ChevronUp className="-rotate-90" size={18} />
               </button>
               
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar px-2">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                   <button
                     key={page}
                     onClick={() => setCurrentPage(page)}
                     className={cn(
-                      "w-10 h-10 rounded-xl font-bold text-sm transition-all",
+                      "min-w-[40px] h-10 rounded-xl font-bold text-sm transition-all shrink-0",
                       currentPage === page ? "bg-white text-accent" : "hover:bg-white/10"
                     )}
                   >
@@ -578,15 +604,15 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative w-full max-w-2xl bg-white rounded-[32px] p-8 shadow-2xl overflow-hidden"
+                className="relative w-full max-w-2xl bg-white rounded-[24px] md:rounded-[32px] p-6 md:p-8 shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
               >
-                <div className="flex justify-between items-center mb-8">
-                  <h2 className="text-2xl font-display font-bold">New Reading Note</h2>
+                <div className="flex justify-between items-center mb-6 md:mb-8">
+                  <h2 className="text-xl md:text-2xl font-display font-bold">New Reading Note</h2>
                   <button onClick={() => setIsAdding(false)} className="p-2 hover:bg-app-bg rounded-xl transition-colors">
                     <X size={24} />
                   </button>
                 </div>
-                <form onSubmit={handleAddQuote} className="space-y-6">
+                <form onSubmit={handleAddQuote} className="space-y-4 md:space-y-6">
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-muted uppercase tracking-widest ml-1">Title</label>
                     <input
@@ -594,7 +620,7 @@ export default function App() {
                       value={newQuote.title}
                       onChange={e => setNewQuote({ ...newQuote, title: e.target.value })}
                       placeholder="Book title or topic"
-                      className="w-full bg-app-bg border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-accent/5 transition-all outline-none font-medium"
+                      className="w-full bg-app-bg border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-accent/5 transition-all outline-none font-medium text-sm md:text-base"
                     />
                   </div>
                   <div className="space-y-2">
@@ -604,10 +630,10 @@ export default function App() {
                       value={newQuote.content}
                       onChange={e => setNewQuote({ ...newQuote, content: e.target.value })}
                       placeholder="What inspired you?"
-                      className="w-full bg-app-bg border-none rounded-2xl px-4 py-4 focus:ring-2 focus:ring-accent/5 transition-all outline-none min-h-[150px] resize-none"
+                      className="w-full bg-app-bg border-none rounded-2xl px-4 py-4 focus:ring-2 focus:ring-accent/5 transition-all outline-none min-h-[120px] md:min-h-[150px] resize-none text-sm md:text-base"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-muted uppercase tracking-widest ml-1">Author</label>
                       <input
@@ -639,8 +665,8 @@ export default function App() {
                       className="w-full bg-app-bg border-none rounded-2xl px-4 py-3 text-sm outline-none"
                     />
                   </div>
-                  <div className="flex justify-end pt-4">
-                    <button type="submit" className="bg-accent text-white px-10 py-4 rounded-2xl font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all">
+                  <div className="flex justify-end pt-2 md:pt-4">
+                    <button type="submit" className="w-full md:w-auto bg-accent text-white px-10 py-4 rounded-2xl font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all">
                       Save Note
                     </button>
                   </div>
@@ -668,9 +694,20 @@ export default function App() {
                       <Save size={14} /> Save
                     </button>
                   ) : (
-                    <button onClick={() => setIsEditingSidebar(true)} className="text-muted hover:text-accent flex items-center gap-1 text-xs font-bold bg-app-bg px-3 py-1 rounded-full transition-colors">
-                      <Edit3 size={14} /> Edit
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setIsEditingSidebar(true)} className="text-muted hover:text-accent flex items-center gap-1 text-xs font-bold bg-app-bg px-3 py-1 rounded-full transition-colors">
+                        <Edit3 size={14} /> Edit
+                      </button>
+                      <button 
+                        onClick={() => handleSetHero(selectedQuote.id)} 
+                        className={cn(
+                          "flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full transition-colors",
+                          heroQuoteId === selectedQuote.id ? "bg-accent text-white" : "bg-app-bg text-muted hover:text-accent"
+                        )}
+                      >
+                        <LayoutGrid size={14} /> {heroQuoteId === selectedQuote.id ? "Featured" : "Set as Hero"}
+                      </button>
+                    </div>
                   )}
                 </div>
                 <button onClick={() => { setSelectedQuoteId(null); setIsEditingSidebar(false); }} className="p-2 hover:bg-app-bg rounded-xl transition-colors">
@@ -678,7 +715,7 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 md:space-y-8 custom-scrollbar">
                 {isEditingSidebar ? (
                   <div className="space-y-6">
                     <div className="space-y-2">
@@ -695,7 +732,7 @@ export default function App() {
                       <textarea 
                         value={editForm.content} 
                         onChange={e => setEditForm({ ...editForm, content: e.target.value })}
-                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm leading-relaxed min-h-[200px] outline-none"
+                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm leading-relaxed min-h-[150px] md:min-h-[200px] outline-none"
                       />
                     </div>
                     <div className="space-y-2">
@@ -712,7 +749,7 @@ export default function App() {
                       <textarea 
                         value={editForm.comment} 
                         onChange={e => setEditForm({ ...editForm, comment: e.target.value })}
-                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm min-h-[120px] outline-none"
+                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm min-h-[100px] md:min-h-[120px] outline-none"
                       />
                     </div>
                     <div className="space-y-2">
@@ -725,7 +762,7 @@ export default function App() {
                         placeholder="https://..."
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Category</label>
                         <select
@@ -753,33 +790,33 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-8">
+                  <div className="space-y-6 md:space-y-8">
                     <div className="space-y-4">
-                      <h3 className="text-3xl font-display font-bold leading-tight">{selectedQuote.title}</h3>
-                      <div className="bg-app-bg p-8 rounded-[32px] text-lg leading-relaxed text-accent/80 whitespace-pre-wrap italic">
+                      <h3 className="text-2xl md:text-3xl font-display font-bold leading-tight">{selectedQuote.title}</h3>
+                      <div className="bg-app-bg p-6 md:p-8 rounded-[24px] md:rounded-[32px] text-base md:text-lg leading-relaxed text-accent/80 whitespace-pre-wrap italic">
                         "{selectedQuote.content}"
                       </div>
                       <div className="flex items-center gap-3 text-muted">
                         <User size={16} />
-                        <span className="font-bold">{selectedQuote.author}</span>
+                        <span className="font-bold text-sm md:text-base">{selectedQuote.author}</span>
                       </div>
                     </div>
                     
-                    <div className="space-y-4">
+                    <div className="space-y-3 md:space-y-4">
                       <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted">My Thoughts</h4>
-                      <p className="text-accent/70 leading-relaxed text-lg whitespace-pre-wrap">
+                      <p className="text-accent/70 leading-relaxed text-base md:text-lg whitespace-pre-wrap">
                         {selectedQuote.comment || "No thoughts recorded yet..."}
                       </p>
                     </div>
 
                     {selectedQuote.source_url && (
-                      <div className="space-y-4">
+                      <div className="space-y-3 md:space-y-4">
                         <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted">Source</h4>
                         <a 
                           href={selectedQuote.source_url} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-blue-600 hover:underline font-medium"
+                          className="flex items-center gap-2 text-blue-600 hover:underline font-medium text-sm md:text-base"
                         >
                           <Globe size={16} />
                           <span className="truncate">{selectedQuote.source_url}</span>
@@ -787,14 +824,14 @@ export default function App() {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-6 pt-8 border-t border-border">
+                    <div className="grid grid-cols-2 gap-4 md:gap-6 pt-6 md:pt-8 border-t border-border">
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-muted uppercase tracking-widest">Category</p>
-                        <p className="font-bold">{selectedQuote.category}</p>
+                        <p className="font-bold text-sm md:text-base">{selectedQuote.category}</p>
                       </div>
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-muted uppercase tracking-widest">Added on</p>
-                        <p className="font-bold">{new Date(selectedQuote.created_at).toLocaleDateString()}</p>
+                        <p className="font-bold text-sm md:text-base">{new Date(selectedQuote.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
                   </div>
@@ -831,15 +868,15 @@ function NoteCard({ quote, state, onClick, onDelete, onBoost, onTogglePin }: { q
     <motion.article 
       layout
       onClick={onClick}
-      className="group bg-white rounded-[32px] p-8 card-shadow hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col h-full border border-transparent hover:border-border relative overflow-hidden"
+      className="group bg-white rounded-[24px] md:rounded-[32px] p-6 md:p-8 card-shadow hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col h-full border border-transparent hover:border-border relative overflow-hidden"
     >
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4 md:mb-6">
         <div className="flex flex-wrap gap-2">
-          <span className={cn("px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm", state.tagBg)}>
+          <span className={cn("px-2.5 py-0.5 md:px-3 md:py-1 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-wider shadow-sm", state.tagBg)}>
             {state.label}
           </span>
           {quote.is_pinned && (
-            <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-1">
+            <span className="px-2.5 py-0.5 md:px-3 md:py-1 rounded-full bg-amber-50 text-amber-600 text-[9px] md:text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-1">
               <Pin size={10} /> Pinned
             </span>
           )}
@@ -848,7 +885,7 @@ function NoteCard({ quote, state, onClick, onDelete, onBoost, onTogglePin }: { q
           <button 
             onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
             className={cn(
-              "p-2 rounded-lg transition-colors",
+              "p-1.5 md:p-2 rounded-lg transition-colors",
               quote.is_pinned ? "bg-amber-50 text-amber-600" : "hover:bg-app-bg text-muted hover:text-accent"
             )}
             title={quote.is_pinned ? "Unpin" : "Pin"}
@@ -857,7 +894,7 @@ function NoteCard({ quote, state, onClick, onDelete, onBoost, onTogglePin }: { q
           </button>
           <button 
             onClick={(e) => { e.stopPropagation(); onBoost(); }}
-            className="p-2 hover:bg-emerald-50 text-muted hover:text-emerald-600 rounded-lg transition-colors"
+            className="p-1.5 md:p-2 hover:bg-emerald-50 text-muted hover:text-emerald-600 rounded-lg transition-colors"
             title="Boost"
           >
             <RefreshCw size={14} />
@@ -865,32 +902,26 @@ function NoteCard({ quote, state, onClick, onDelete, onBoost, onTogglePin }: { q
         </div>
       </div>
 
-      <div className="flex-1 space-y-4">
-        <h4 className="text-2xl font-display font-black leading-tight group-hover:text-accent transition-colors">
+      <div className="flex-1 space-y-3 md:space-y-4">
+        <h4 className="text-xl md:text-2xl font-display font-black leading-tight group-hover:text-accent transition-colors">
           {quote.title || "Untitled"}
         </h4>
-        <p className="text-muted text-base line-clamp-4 leading-relaxed whitespace-pre-wrap">
+        <p className="text-muted text-sm md:text-base line-clamp-4 leading-relaxed whitespace-pre-wrap">
           {quote.content}
         </p>
       </div>
 
-      <div className="pt-8 mt-auto flex items-center justify-between border-t border-border/50">
+      <div className="pt-6 md:pt-8 mt-auto flex items-center justify-between border-t border-border/50">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <User size={12} className="text-muted" />
-            <span className="text-xs font-bold text-muted truncate max-w-[120px]">{quote.author}</span>
+            <span className="text-[10px] md:text-xs font-bold text-muted truncate max-w-[100px] md:max-w-[120px]">{quote.author}</span>
           </div>
-          {quote.source_url && (
-            <div className="flex items-center gap-2 text-blue-500/60 text-[10px] font-medium">
-              <Globe size={10} />
-              <span className="truncate max-w-[120px]">Link attached</span>
-            </div>
-          )}
         </div>
         <div className="flex items-center gap-3 text-muted">
           <button 
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="p-2 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors"
+            className="p-1.5 md:p-2 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors"
           >
             <Trash2 size={14} />
           </button>
