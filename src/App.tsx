@@ -29,7 +29,15 @@ import {
   Wind,
   Archive,
   RefreshCw,
-  Info
+  Info,
+  User,
+  LogOut,
+  Bell,
+  ShoppingBag,
+  Calendar,
+  LayoutGrid,
+  Heart,
+  MessageCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { clsx, type ClassValue } from "clsx";
@@ -44,7 +52,11 @@ export default function App() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("全部");
+  const [currentView, setCurrentView] = useState<"dashboard" | "calendar" | "archive">("dashboard");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "confidence">("newest");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
   const [isAdding, setIsAdding] = useState(false);
   const [newQuote, setNewQuote] = useState({ title: "", content: "", author: "", comment: "", category: "未分类", source_url: "", is_pinned: false });
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -59,6 +71,20 @@ export default function App() {
   const [isEditingSidebar, setIsEditingSidebar] = useState(false);
 
   const selectedQuote = quotes.find(q => q.id === selectedQuoteId);
+
+  const sortedQuotes = [...quotes].sort((a, b) => {
+    if (sortBy === "newest") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    if (sortBy === "confidence") return b.confidence - a.confidence;
+    return 0;
+  });
+
+  const totalPages = Math.ceil(sortedQuotes.length / itemsPerPage);
+  const paginatedQuotes = sortedQuotes.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, searchQuery, sortBy, currentView]);
 
   useEffect(() => {
     if (selectedQuote && !isEditingSidebar) {
@@ -80,7 +106,7 @@ export default function App() {
       }
     };
     initGarden();
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, searchQuery, sortBy]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -212,11 +238,11 @@ export default function App() {
   };
 
   const getKnowledgeState = (confidence: number) => {
-    if (confidence <= 0) return { icon: <Archive size={14} />, label: "土壤", color: "text-stone-600", bg: "bg-stone-100", cardBg: "bg-[#f5f5f4] border-stone-200" };
-    if (confidence < 0.3) return { icon: <Wind size={14} />, label: "枯叶", color: "text-orange-800", bg: "bg-orange-100", cardBg: "bg-[#fff7ed] border-orange-200" };
-    if (confidence < 0.7) return { icon: <Wind size={14} />, label: "黄叶", color: "text-amber-700", bg: "bg-amber-100", cardBg: "bg-[#fffbeb] border-amber-200" };
-    if (confidence < 0.8) return { icon: <Sprout size={14} />, label: "萌芽", color: "text-lime-700", bg: "bg-lime-100", cardBg: "bg-[#f7fee7] border-lime-200" };
-    return { icon: <Leaf size={14} />, label: "绿叶", color: "text-emerald-700", bg: "bg-emerald-100", cardBg: "bg-[#f0fdf4] border-emerald-200" };
+    if (confidence <= 0) return { icon: <Archive size={14} />, label: "土壤", color: "text-stone-600", bg: "bg-stone-100", cardBg: "bg-white", tagBg: "bg-stone-100 text-stone-600" };
+    if (confidence < 0.3) return { icon: <Wind size={14} />, label: "枯叶", color: "text-orange-600", bg: "bg-orange-50", cardBg: "bg-white", tagBg: "bg-orange-50 text-orange-600" };
+    if (confidence < 0.7) return { icon: <Wind size={14} />, label: "黄叶", color: "text-amber-600", bg: "bg-amber-50", cardBg: "bg-white", tagBg: "bg-amber-50 text-amber-600" };
+    if (confidence < 0.8) return { icon: <Sprout size={14} />, label: "萌芽", color: "text-lime-600", bg: "bg-lime-50", cardBg: "bg-white", tagBg: "bg-lime-50 text-lime-600" };
+    return { icon: <Leaf size={14} />, label: "绿叶", color: "text-emerald-600", bg: "bg-emerald-50", cardBg: "bg-white", tagBg: "bg-emerald-50 text-emerald-600" };
   };
 
   const handleUpdate = async (id: number) => {
@@ -240,436 +266,520 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fdfcf9] text-[#2c2c2c] font-sans selection:bg-[#e6e2d3] flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-20 bg-[#fdfcf9]/80 backdrop-blur-md border-b border-[#e6e2d3] px-3 sm:px-6 py-2 sm:py-4">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-2 sm:gap-4">
-          <div className="flex items-center justify-between w-full md:w-auto gap-2 sm:gap-4">
-            <div className="flex items-center gap-2 sm:gap-4">
-              <button 
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="p-1.5 sm:p-2 hover:bg-[#f9f8f4] rounded-lg text-[#5A5A40] transition-colors"
-              >
-                <Menu size={18} />
-              </button>
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#5A5A40] rounded-lg sm:rounded-xl flex items-center justify-center text-white shadow-lg">
-                  <BookOpen size={16} className="sm:hidden" />
-                  <BookOpen size={20} className="hidden sm:block" />
-                </div>
-                <h1 className="text-base sm:text-2xl font-serif font-bold tracking-tight">读书笔记</h1>
-              </div>
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <div className={cn(
-                "px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold uppercase tracking-wider",
-                storage.isUsingNeon() ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
-              )}>
-                {storage.isUsingNeon() ? "Neon" : "本地"}
-              </div>
-              <div className="flex items-center gap-0.5 sm:gap-1 border-l border-[#e6e2d3] ml-1 pl-1 sm:ml-2 sm:pl-2">
-                <button 
-                  onClick={handleExport}
-                  className="p-1 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors"
-                  title="导出"
-                >
-                  <Download size={14} />
-                </button>
-                <label className="p-1 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors cursor-pointer" title="导入">
-                  <Upload size={14} />
-                  <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-                </label>
-                <button 
-                  onClick={handleGardenMaintenance}
-                  className={cn("p-1 hover:bg-[#f9f8f4] rounded-lg text-[#8e8e7e] transition-colors", isLoading && "animate-spin")}
-                  title="维护"
-                >
-                  <RefreshCw size={14} />
-                </button>
-              </div>
-            </div>
+    <div className="min-h-screen bg-app-bg text-accent font-sans flex overflow-hidden">
+      {/* Sidebar */}
+      <aside className={cn(
+        "fixed lg:relative inset-y-0 left-0 z-40 bg-white border-r border-border w-[280px] shrink-0 transition-transform duration-300 flex flex-col",
+        !isSidebarOpen && "-translate-x-full lg:translate-x-0 lg:w-[80px]"
+      )}>
+        <div className="p-6 flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-white shrink-0">
+            <BookOpen size={20} />
           </div>
+          {isSidebarOpen && <h1 className="text-xl font-display font-bold tracking-tight">ReadNote.</h1>}
+        </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto flex-1 max-w-xl">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8e8e7e]" size={14} />
-              <input 
-                type="text"
-                placeholder="搜索..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#f9f8f4] border-none rounded-full pl-9 pr-4 py-1.5 sm:py-2 text-xs sm:text-sm focus:ring-2 focus:ring-[#5A5A40]/20 transition-all"
-              />
+        <div className="px-4 mb-8">
+          <div className="flex items-center gap-3 p-3 rounded-2xl hover:bg-app-bg transition-colors cursor-pointer group">
+            <div className="w-12 h-12 rounded-full overflow-hidden bg-muted/20 shrink-0">
+              <img src="https://picsum.photos/seed/user/100/100" alt="User" referrerPolicy="no-referrer" />
             </div>
-            <button 
-              onClick={() => setIsAdding(!isAdding)}
-              className="flex items-center gap-2 bg-[#5A5A40] hover:bg-[#4a4a34] text-white px-4 py-2 rounded-full transition-all active:scale-95 shadow-md whitespace-nowrap"
-            >
-              {isAdding ? <X size={18} /> : <Plus size={18} />}
-              <span className="hidden sm:inline">{isAdding ? "取消" : "记录新笔记"}</span>
-            </button>
+            {isSidebarOpen && (
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-sm truncate">Tbag</h3>
+                <p className="text-muted text-xs">Student</p>
+              </div>
+            )}
           </div>
         </div>
-      </header>
 
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Sidebar Backdrop for Mobile */}
-        <AnimatePresence>
-          {isSidebarOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSidebarOpen(false)}
-              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 lg:hidden"
-            />
-          )}
-        </AnimatePresence>
+        <nav className="flex-1 px-4 space-y-2 overflow-y-auto custom-scrollbar">
+          <SidebarItem 
+            icon={<LayoutGrid size={20} />} 
+            label="Dashboard" 
+            active={currentView === "dashboard"} 
+            onClick={() => { setCurrentView("dashboard"); setSelectedCategory("全部"); }} 
+            isOpen={isSidebarOpen} 
+          />
+          
+          <div className="pt-4 pb-2">
+            {isSidebarOpen && <p className="px-4 text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Categories</p>}
+            <div className="space-y-1">
+              {categories.map(cat => (
+                <SidebarItem 
+                  key={cat.id} 
+                  icon={<Hash size={18} />} 
+                  label={cat.name} 
+                  active={currentView === "dashboard" && selectedCategory === cat.name} 
+                  onClick={() => { setCurrentView("dashboard"); setSelectedCategory(cat.name); }} 
+                  isOpen={isSidebarOpen}
+                  isSubItem
+                />
+              ))}
+            </div>
+          </div>
 
-        {/* Sidebar */}
-        <AnimatePresence>
-          {isSidebarOpen && (
-            <motion.nav
-              initial={{ x: -260, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -260, opacity: 0 }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed lg:relative inset-y-0 left-0 z-40 bg-[#fdfcf9] border-r border-[#e6e2d3] overflow-y-auto w-[260px] shrink-0 shadow-2xl lg:shadow-none"
+          <SidebarItem 
+            icon={<Calendar size={20} />} 
+            label="Calendar" 
+            active={currentView === "calendar"}
+            onClick={() => setCurrentView("calendar")}
+            isOpen={isSidebarOpen} 
+          />
+          <SidebarItem 
+            icon={<Archive size={20} />} 
+            label="Archive" 
+            active={currentView === "archive"}
+            onClick={() => setCurrentView("archive")}
+            isOpen={isSidebarOpen} 
+          />
+        </nav>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
+        {/* Top Bar */}
+        <header className="h-20 px-8 flex items-center justify-between shrink-0 bg-app-bg/80 backdrop-blur-md sticky top-0 z-30">
+          <div className="flex items-center gap-4 flex-1 max-w-xl">
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-white rounded-xl transition-colors lg:hidden">
+              <Menu size={20} />
+            </button>
+            <div className="relative flex-1 group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-accent transition-colors" size={18} />
+              <input 
+                type="text"
+                placeholder="Search notes, authors, books..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/50 border-none rounded-2xl pl-12 pr-4 py-3 text-sm focus:ring-2 focus:ring-accent/5 transition-all outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsAdding(true)}
+              className="bg-accent text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
             >
-              <div className="p-4 sm:p-6 space-y-6 sm:space-y-8">
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#8e8e7e]">笔记分类</h3>
-                    <button 
-                      onClick={() => setIsManagingCategories(!isManagingCategories)}
-                      className="text-[10px] font-bold text-[#5A5A40] hover:underline"
-                    >
-                      {isManagingCategories ? "完成" : "管理"}
-                    </button>
-                  </div>
+              <Plus size={18} />
+              <span>New Note</span>
+            </button>
+          </div>
+        </header>
 
-                  <div className="space-y-1">
-                    <button
-                      onClick={() => setSelectedCategory("全部")}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all",
-                        selectedCategory === "全部" ? "bg-[#5A5A40] text-white shadow-md" : "text-[#4a4a4a] hover:bg-[#f9f8f4]"
-                      )}
-                    >
-                      <Library size={18} />
-                      全部笔记
-                    </button>
-                    {categories.map(cat => (
-                      <div key={cat.id} className="group flex items-center gap-1">
-                        <button
-                          onClick={() => setSelectedCategory(cat.name)}
-                          className={cn(
-                            "flex-1 flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all truncate",
-                            selectedCategory === cat.name ? "bg-[#5A5A40] text-white shadow-md" : "text-[#4a4a4a] hover:bg-[#f9f8f4]"
-                          )}
-                        >
-                          <Hash size={16} className="opacity-60 shrink-0" />
-                          <span className="truncate">{cat.name}</span>
-                        </button>
-                        {isManagingCategories && cat.name !== "未分类" && (
-                          <button onClick={() => handleDeleteCategory(cat.id, cat.name)} className="p-2 text-red-400 hover:text-red-600">
-                            <Trash2 size={14} />
-                          </button>
-                        )}
+        <div className="flex-1 overflow-y-auto px-8 pb-32 custom-scrollbar">
+          <div className="max-w-7xl mx-auto space-y-8">
+            {currentView === "dashboard" && (
+              <>
+                {/* Hero Section */}
+                {!searchQuery && selectedCategory === "全部" && quotes.length > 0 && (
+                  <section className="relative bg-white rounded-[40px] p-8 md:p-12 overflow-hidden card-shadow group border-2 border-accent/5">
+                    <div className="relative z-10 max-w-2xl space-y-6">
+                      <div className="flex gap-2">
+                        <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider">Featured</span>
+                        <span className="px-3 py-1 rounded-full bg-purple-50 text-purple-600 text-[10px] font-bold uppercase tracking-wider">Latest</span>
                       </div>
-                    ))}
+                      <div className="space-y-4">
+                        <h2 className="text-4xl md:text-6xl font-display font-black leading-tight text-accent">
+                          {quotes[0].title || "Untitled Note"}
+                        </h2>
+                        <p className="text-muted text-xl line-clamp-3 leading-relaxed whitespace-pre-wrap">
+                          {quotes[0].content}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-4 pt-4">
+                        <button 
+                          onClick={() => setSelectedQuoteId(quotes[0].id)}
+                          className="bg-accent text-white px-10 py-5 rounded-2xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xl"
+                        >
+                          Read Note
+                        </button>
+                        <button className="text-accent font-bold hover:underline">View details</button>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                {/* Grid Section */}
+                <section>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-2xl font-display font-bold">{selectedCategory} Notes</h3>
+                    <div className="flex items-center gap-2 text-muted text-sm font-medium">
+                      <span>Sort by:</span>
+                      <div className="relative group/sort">
+                        <button className="text-accent flex items-center gap-1 hover:bg-white px-3 py-1 rounded-lg transition-colors">
+                          {sortBy === "newest" ? "Newest" : sortBy === "oldest" ? "Oldest" : "Confidence"} 
+                          <ChevronDown size={14} />
+                        </button>
+                        <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-border py-2 min-w-[120px] opacity-0 invisible group-hover/sort:opacity-100 group-hover/sort:visible transition-all z-50">
+                          <button onClick={() => setSortBy("newest")} className={cn("w-full text-left px-4 py-2 text-xs hover:bg-app-bg transition-colors", sortBy === "newest" && "text-accent font-bold")}>Newest</button>
+                          <button onClick={() => setSortBy("oldest")} className={cn("w-full text-left px-4 py-2 text-xs hover:bg-app-bg transition-colors", sortBy === "oldest" && "text-accent font-bold")}>Oldest</button>
+                          <button onClick={() => setSortBy("confidence")} className={cn("w-full text-left px-4 py-2 text-xs hover:bg-app-bg transition-colors", sortBy === "confidence" && "text-accent font-bold")}>Confidence</button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  {isManagingCategories && (
-                    <form onSubmit={handleAddCategory} className="mt-4 flex gap-2">
-                      <input 
-                        type="text"
-                        placeholder="新分类..."
-                        value={newCategoryName}
-                        onChange={(e) => setNewCategoryName(e.target.value)}
-                        className="flex-1 bg-[#f9f8f4] border-none rounded-lg px-3 py-2 text-xs"
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-20">
+                      <Loader2 className="animate-spin text-muted" size={32} />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                      {paginatedQuotes.map(quote => (
+                        <NoteCard 
+                          key={quote.id} 
+                          quote={quote} 
+                          state={getKnowledgeState(quote.confidence)}
+                          onClick={() => setSelectedQuoteId(quote.id)}
+                          onDelete={() => handleDelete(quote.id)}
+                          onBoost={() => handleBoost(quote.id)}
+                          onTogglePin={() => handleTogglePin(quote)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </>
+            )}
+
+            {currentView === "calendar" && (
+              <section className="space-y-8">
+                <h3 className="text-3xl font-display font-bold">Timeline</h3>
+                <div className="space-y-12 relative before:absolute before:inset-y-0 before:left-4 before:w-0.5 before:bg-border">
+                  {Object.entries(
+                    sortedQuotes.reduce((acc, quote) => {
+                      const date = new Date(quote.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' });
+                      if (!acc[date]) acc[date] = [];
+                      acc[date].push(quote);
+                      return acc;
+                    }, {} as Record<string, Quote[]>)
+                  ).map(([month, monthQuotes]) => (
+                    <div key={month} className="relative pl-12 space-y-6">
+                      <div className="absolute left-0 top-0 w-8 h-8 bg-accent rounded-full border-4 border-app-bg flex items-center justify-center text-white">
+                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                      </div>
+                      <h4 className="text-xl font-bold text-accent">{month}</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {monthQuotes.map(quote => (
+                          <NoteCard 
+                            key={quote.id} 
+                            quote={quote} 
+                            state={getKnowledgeState(quote.confidence)}
+                            onClick={() => setSelectedQuoteId(quote.id)}
+                            onDelete={() => handleDelete(quote.id)}
+                            onBoost={() => handleBoost(quote.id)}
+                            onTogglePin={() => handleTogglePin(quote)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {currentView === "archive" && (
+              <section className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-3xl font-display font-bold">Archive</h3>
+                  <p className="text-muted text-sm">Notes that have naturally decayed over time</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {sortedQuotes.filter(q => q.confidence <= 0).length === 0 ? (
+                    <div className="col-span-full py-20 text-center bg-white rounded-[32px] border border-dashed border-border">
+                      <Archive size={48} className="mx-auto mb-4 text-muted opacity-20" />
+                      <p className="text-muted font-medium">No archived notes yet. Keep learning!</p>
+                    </div>
+                  ) : (
+                    sortedQuotes.filter(q => q.confidence <= 0).map(quote => (
+                      <NoteCard 
+                        key={quote.id} 
+                        quote={quote} 
+                        state={getKnowledgeState(quote.confidence)}
+                        onClick={() => setSelectedQuoteId(quote.id)}
+                        onDelete={() => handleDelete(quote.id)}
+                        onBoost={() => handleBoost(quote.id)}
+                        onTogglePin={() => handleTogglePin(quote)}
                       />
-                      <button type="submit" className="p-2 bg-[#5A5A40] text-white rounded-lg"><Plus size={16} /></button>
-                    </form>
+                    ))
                   )}
                 </div>
-              </div>
-            </motion.nav>
-          )}
-        </AnimatePresence>
+              </section>
+            )}
+          </div>
+        </div>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-12 scroll-smooth bg-[#fdfcf9]">
-          <div className="max-w-3xl mx-auto">
-            <AnimatePresence>
-              {isAdding && (
-                <motion.div
-                  initial={{ opacity: 0, y: -20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  className="mb-6 sm:mb-12 bg-white rounded-xl sm:rounded-3xl p-4 sm:p-8 shadow-sm border border-[#e6e2d3]"
-                >
-                  <form onSubmit={handleAddQuote} className="space-y-6">
+        {/* Floating Pagination Bar */}
+        {totalPages > 1 && currentView === "dashboard" && (
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40">
+            <div className="bg-accent text-white px-2 py-2 rounded-2xl flex items-center gap-1 shadow-2xl border border-white/10 glass">
+              <button 
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                className="p-2 hover:bg-white hover:text-accent rounded-xl transition-all disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-white"
+              >
+                <ChevronUp className="-rotate-90" size={18} />
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={cn(
+                      "w-10 h-10 rounded-xl font-bold text-sm transition-all",
+                      currentPage === page ? "bg-white text-accent" : "hover:bg-white/10"
+                    )}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+
+              <button 
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                className="p-2 hover:bg-white hover:text-accent rounded-xl transition-all disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-white"
+              >
+                <ChevronUp className="rotate-90" size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Add Note Modal */}
+        <AnimatePresence>
+          {isAdding && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                exit={{ opacity: 0 }}
+                onClick={() => setIsAdding(false)}
+                className="absolute inset-0 bg-accent/40 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-2xl bg-white rounded-[32px] p-8 shadow-2xl overflow-hidden"
+              >
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-2xl font-display font-bold">New Reading Note</h2>
+                  <button onClick={() => setIsAdding(false)} className="p-2 hover:bg-app-bg rounded-xl transition-colors">
+                    <X size={24} />
+                  </button>
+                </div>
+                <form onSubmit={handleAddQuote} className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-muted uppercase tracking-widest ml-1">Title</label>
                     <input
                       type="text"
                       value={newQuote.title}
                       onChange={e => setNewQuote({ ...newQuote, title: e.target.value })}
-                      placeholder="笔记标题"
-                      className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 focus:ring-2 focus:ring-[#5A5A40]/20 font-medium"
+                      placeholder="Book title or topic"
+                      className="w-full bg-app-bg border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-accent/5 transition-all outline-none font-medium"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-muted uppercase tracking-widest ml-1">Content</label>
                     <textarea
                       required
                       value={newQuote.content}
                       onChange={e => setNewQuote({ ...newQuote, content: e.target.value })}
-                      placeholder="记录触动你的文字..."
-                      className="w-full bg-[#f9f8f4] border-none rounded-2xl p-4 focus:ring-2 focus:ring-[#5A5A40]/20 min-h-[120px] font-sans text-lg leading-relaxed"
+                      placeholder="What inspired you?"
+                      className="w-full bg-app-bg border-none rounded-2xl px-4 py-4 focus:ring-2 focus:ring-accent/5 transition-all outline-none min-h-[150px] resize-none"
                     />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-muted uppercase tracking-widest ml-1">Author</label>
                       <input
                         type="text"
                         value={newQuote.author}
                         onChange={e => setNewQuote({ ...newQuote, author: e.target.value })}
-                        placeholder="作者/出处"
-                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
+                        placeholder="Author name"
+                        className="w-full bg-app-bg border-none rounded-2xl px-4 py-3 text-sm outline-none"
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-muted uppercase tracking-widest ml-1">Category</label>
                       <select
                         value={newQuote.category}
                         onChange={e => setNewQuote({ ...newQuote, category: e.target.value })}
-                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
+                        className="w-full bg-app-bg border-none rounded-2xl px-4 py-3 text-sm outline-none appearance-none"
                       >
                         {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
                       </select>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <input
-                        type="text"
-                        value={newQuote.source_url}
-                        onChange={e => setNewQuote({ ...newQuote, source_url: e.target.value })}
-                        placeholder="原文链接 (可选)"
-                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
-                      />
-                      <input
-                        type="text"
-                        value={newQuote.comment}
-                        onChange={e => setNewQuote({ ...newQuote, comment: e.target.value })}
-                        placeholder="我的感悟"
-                        className="w-full bg-[#f9f8f4] border-none rounded-xl p-3 text-sm"
-                      />
-                    </div>
-                    <div className="flex justify-end">
-                      <button type="submit" className="bg-[#5A5A40] text-white px-8 py-3 rounded-full font-medium shadow-lg">保存笔记</button>
-                    </div>
-                  </form>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div className="space-y-8">
-              {isLoading ? (
-                <div className="text-center py-20 opacity-40"><Loader2 className="mx-auto animate-spin" /></div>
-              ) : quotes.length === 0 ? (
-                <div className="text-center py-20 opacity-40"><BookOpen size={48} className="mx-auto mb-4" /><p>暂无笔记</p></div>
-              ) : (
-                quotes.map((quote) => {
-                  const date = formatDate(quote.created_at);
-                  const state = getKnowledgeState(quote.confidence);
-                  return (
-                    <motion.article 
-                      layout 
-                      key={quote.id} 
-                      className={cn(
-                        "group rounded-xl sm:rounded-[2rem] p-4 sm:p-8 shadow-sm border transition-all duration-500",
-                        state.cardBg,
-                        selectedQuoteId === quote.id ? "ring-2 ring-[#5A5A40]/30 shadow-md" : "hover:shadow-md"
-                      )}
-                      onClick={() => setSelectedQuoteId(quote.id)}
-                    >
-                      {editingId === quote.id ? (
-                        <div className="space-y-4" onClick={e => e.stopPropagation()}>
-                          <input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className="w-full bg-white/50 rounded-lg p-2 border border-black/5" />
-                          <textarea value={editForm.content} onChange={e => setEditForm({ ...editForm, content: e.target.value })} className="w-full bg-white/50 rounded-xl p-4 font-serif italic border border-black/5" />
-                          <div className="flex justify-end gap-2">
-                            <button onClick={() => setEditingId(null)} className="px-4 py-2 text-sm">取消</button>
-                            <button onClick={() => handleUpdate(quote.id)} className="bg-[#5A5A40] text-white px-6 py-2 rounded-full text-sm font-medium">保存</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div>
-                          <div className="flex justify-between items-start mb-4">
-                            <div className="flex flex-wrap gap-2 items-center">
-                              <span className="text-[10px] font-bold uppercase bg-black/5 px-2 py-0.5 rounded text-[#5A5A40]">{quote.category}</span>
-                              <div className={cn("flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded shadow-sm", state.bg, state.color)}>
-                                {state.icon}
-                                {state.label} {(quote.confidence * 100).toFixed(0)}%
-                              </div>
-                              {quote.is_pinned && <span className="text-[10px] font-bold uppercase bg-amber-50 text-amber-600 px-2 py-0.5 rounded flex items-center gap-1 shadow-sm"><Pin size={10} /> 置顶</span>}
-                            </div>
-                            <div className="flex gap-1 sm:gap-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleBoost(quote.id); }} 
-                                className="p-2 bg-white/80 hover:bg-white rounded-full text-emerald-600 shadow-sm transition-all hover:scale-110 active:scale-90"
-                                title="索引/滋养知识"
-                              >
-                                <RefreshCw size={16} />
-                              </button>
-                              <button onClick={(e) => { e.stopPropagation(); handleTogglePin(quote); }} className={cn("p-2 bg-white/80 hover:bg-white rounded-full shadow-sm transition-all", quote.is_pinned ? "text-amber-500" : "text-gray-400")}><Pin size={16} /></button>
-                              <button onClick={(e) => { e.stopPropagation(); setEditingId(quote.id); setEditForm(quote); }} className="p-2 bg-white/80 hover:bg-white rounded-full shadow-sm text-gray-400"><Edit3 size={16} /></button>
-                              <button onClick={(e) => { e.stopPropagation(); handleDelete(quote.id); }} className="p-2 bg-white/80 hover:bg-white rounded-full shadow-sm text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
-                            </div>
-                          </div>
-                          <h3 className="text-base sm:text-lg font-sans font-bold mb-1 sm:mb-2 text-gray-900 tracking-tight">{quote.title}</h3>
-                          <p className="font-sans text-sm sm:text-base mb-3 sm:mb-4 text-gray-700 leading-relaxed whitespace-pre-wrap">{quote.content}</p>
-                          <div className="flex justify-between items-center text-xs text-gray-500">
-                            <div className="flex flex-col gap-1">
-                              <cite className="not-italic font-medium border-l-2 border-[#5A5A40] pl-3 text-[#5A5A40]">— {quote.author}</cite>
-                              {quote.source_url && (
-                                <a 
-                                  href={quote.source_url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer" 
-                                  className="text-emerald-600 hover:underline ml-3 flex items-center gap-1"
-                                  onClick={e => e.stopPropagation()}
-                                >
-                                  <Globe size={10} /> 原文链接
-                                </a>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <span title="最后索引时间" className="flex items-center gap-1">
-                                <RefreshCw size={10} className="opacity-50" />
-                                {new Date(quote.last_accessed_at).toLocaleDateString()}
-                              </span>
-                              <span>{date.month} {date.day}, {date.year}</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </motion.article>
-                  );
-                })
-              )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-muted uppercase tracking-widest ml-1">Source URL</label>
+                    <input
+                      type="text"
+                      value={newQuote.source_url}
+                      onChange={e => setNewQuote({ ...newQuote, source_url: e.target.value })}
+                      placeholder="https://example.com"
+                      className="w-full bg-app-bg border-none rounded-2xl px-4 py-3 text-sm outline-none"
+                    />
+                  </div>
+                  <div className="flex justify-end pt-4">
+                    <button type="submit" className="bg-accent text-white px-10 py-4 rounded-2xl font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all">
+                      Save Note
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
             </div>
-          </div>
-        </main>
+          )}
+        </AnimatePresence>
 
-        {/* Sidebar for Details */}
+        {/* Details Sidebar */}
         <AnimatePresence>
           {selectedQuoteId && selectedQuote && (
             <motion.aside
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
-              className="fixed inset-y-0 right-0 w-full md:w-[450px] bg-white shadow-2xl z-50 flex flex-col border-l border-[#e6e2d3]"
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-50 flex flex-col border-l border-border"
             >
-              <div className="p-4 sm:p-6 border-b flex justify-between items-center bg-[#fdfcf9] sticky top-0 z-10">
+              <div className="p-6 border-b border-border flex justify-between items-center sticky top-0 bg-white/80 backdrop-blur-md z-10">
                 <div className="flex items-center gap-3">
-                  <h2 className="font-bold text-xs sm:text-sm uppercase tracking-widest">参阅感悟</h2>
+                  <h2 className="font-display font-bold text-lg">Note Details</h2>
                   {isEditingSidebar ? (
-                    <button onClick={() => handleUpdate(selectedQuote.id)} className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 text-[10px] sm:text-xs font-bold">
-                      <Save size={12} /> 保存
+                    <button onClick={() => handleUpdate(selectedQuote.id)} className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 text-xs font-bold bg-emerald-50 px-3 py-1 rounded-full">
+                      <Save size={14} /> Save
                     </button>
                   ) : (
-                    <button onClick={() => setIsEditingSidebar(true)} className="text-[#8e8e7e] hover:text-[#5A5A40] flex items-center gap-1 text-[10px] sm:text-xs font-bold">
-                      <Edit3 size={12} /> 编辑
+                    <button onClick={() => setIsEditingSidebar(true)} className="text-muted hover:text-accent flex items-center gap-1 text-xs font-bold bg-app-bg px-3 py-1 rounded-full transition-colors">
+                      <Edit3 size={14} /> Edit
                     </button>
                   )}
                 </div>
-                <button onClick={() => { setSelectedQuoteId(null); setIsEditingSidebar(false); }} className="p-1.5 hover:bg-black/5 rounded-full transition-colors"><X size={18} /></button>
+                <button onClick={() => { setSelectedQuoteId(null); setIsEditingSidebar(false); }} className="p-2 hover:bg-app-bg rounded-xl transition-colors">
+                  <X size={20} />
+                </button>
               </div>
-              <div className="p-4 sm:p-8 space-y-5 sm:space-y-8 overflow-y-auto flex-1">
+
+              <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
                 {isEditingSidebar ? (
-                  <div className="space-y-4 sm:space-y-6">
-                    <div>
-                      <label className="block text-[9px] sm:text-[10px] font-bold uppercase text-[#8e8e7e] mb-1 sm:mb-2">标题</label>
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Title</label>
                       <input 
                         type="text" 
                         value={editForm.title} 
                         onChange={e => setEditForm({ ...editForm, title: e.target.value })}
-                        className="w-full bg-[#f9f8f4] border-none rounded-lg sm:rounded-xl p-2 sm:p-3 text-xs sm:text-sm font-medium"
+                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm font-bold outline-none"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[9px] sm:text-[10px] font-bold uppercase text-[#8e8e7e] mb-1 sm:mb-2">内容 (支持换行)</label>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Content</label>
                       <textarea 
                         value={editForm.content} 
                         onChange={e => setEditForm({ ...editForm, content: e.target.value })}
-                        className="w-full bg-[#f9f8f4] border-none rounded-xl sm:rounded-2xl p-3 sm:p-4 text-xs sm:text-sm font-sans leading-relaxed min-h-[120px] sm:min-h-[150px]"
+                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm leading-relaxed min-h-[200px] outline-none"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[9px] sm:text-[10px] font-bold uppercase text-[#8e8e7e] mb-1 sm:mb-2">作者/出处</label>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Author</label>
                       <input 
                         type="text" 
                         value={editForm.author} 
                         onChange={e => setEditForm({ ...editForm, author: e.target.value })}
-                        className="w-full bg-[#f9f8f4] border-none rounded-lg sm:rounded-xl p-2 sm:p-3 text-xs sm:text-sm"
+                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm outline-none"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[9px] sm:text-[10px] font-bold uppercase text-[#8e8e7e] mb-1 sm:mb-2">原文链接</label>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">My Thoughts</label>
+                      <textarea 
+                        value={editForm.comment} 
+                        onChange={e => setEditForm({ ...editForm, comment: e.target.value })}
+                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm min-h-[120px] outline-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Source URL</label>
                       <input 
                         type="text" 
                         value={editForm.source_url} 
                         onChange={e => setEditForm({ ...editForm, source_url: e.target.value })}
-                        className="w-full bg-[#f9f8f4] border-none rounded-lg sm:rounded-xl p-2 sm:p-3 text-xs sm:text-sm"
+                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm outline-none"
                         placeholder="https://..."
                       />
                     </div>
-                    <div>
-                      <label className="block text-[9px] sm:text-[10px] font-bold uppercase text-[#8e8e7e] mb-1 sm:mb-2">我的感悟</label>
-                      <textarea 
-                        value={editForm.comment} 
-                        onChange={e => setEditForm({ ...editForm, comment: e.target.value })}
-                        className="w-full bg-[#f9f8f4] border-none rounded-xl sm:rounded-2xl p-3 sm:p-4 text-xs sm:text-sm min-h-[80px] sm:min-h-[100px]"
-                      />
-                    </div>
-                    <div className="flex gap-2 sm:gap-3 pt-2 sm:pt-4">
-                      <button 
-                        onClick={() => handleUpdate(selectedQuote.id)}
-                        className="flex-1 bg-[#5A5A40] text-white py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-sm font-bold shadow-lg"
-                      >
-                        确认
-                      </button>
-                      <button 
-                        onClick={() => setIsEditingSidebar(false)}
-                        className="flex-1 bg-[#f9f8f4] text-[#8e8e7e] py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-sm font-bold"
-                      >
-                        取消
-                      </button>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Category</label>
+                        <select
+                          value={editForm.category}
+                          onChange={e => setEditForm({ ...editForm, category: e.target.value })}
+                          className="w-full bg-app-bg border-none rounded-2xl px-4 py-3 text-sm outline-none appearance-none"
+                        >
+                          {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Pin Status</label>
+                        <button
+                          type="button"
+                          onClick={() => setEditForm({ ...editForm, is_pinned: !editForm.is_pinned })}
+                          className={cn(
+                            "w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold transition-all",
+                            editForm.is_pinned ? "bg-amber-100 text-amber-600" : "bg-app-bg text-muted"
+                          )}
+                        >
+                          {editForm.is_pinned ? <Pin size={14} /> : <PinOff size={14} />}
+                          {editForm.is_pinned ? "Pinned" : "Not Pinned"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-6 sm:space-y-8">
-                    <div className="space-y-3 sm:space-y-4">
-                      <h3 className="text-xl sm:text-2xl font-sans font-bold text-gray-900 leading-tight tracking-tight">{selectedQuote.title}</h3>
-                      <div className="bg-[#f9f8f4] p-5 sm:p-8 rounded-2xl sm:rounded-[2rem] border border-[#e6e2d3] font-sans text-base sm:text-lg text-gray-800 leading-relaxed whitespace-pre-wrap shadow-inner">
-                        {selectedQuote.content}
+                  <div className="space-y-8">
+                    <div className="space-y-4">
+                      <h3 className="text-3xl font-display font-bold leading-tight">{selectedQuote.title}</h3>
+                      <div className="bg-app-bg p-8 rounded-[32px] text-lg leading-relaxed text-accent/80 whitespace-pre-wrap italic">
+                        "{selectedQuote.content}"
                       </div>
-                      <div className="flex justify-between items-center text-xs sm:text-sm">
-                        <cite className="not-italic font-medium text-[#5A5A40]">— {selectedQuote.author}</cite>
-                        {selectedQuote.source_url && (
-                          <a href={selectedQuote.source_url} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline flex items-center gap-1">
-                            <Globe size={12} /> 查看原文
-                          </a>
-                        )}
+                      <div className="flex items-center gap-3 text-muted">
+                        <User size={16} />
+                        <span className="font-bold">{selectedQuote.author}</span>
                       </div>
                     </div>
                     
-                    <div className="pt-6 sm:pt-8 border-t border-[#e6e2d3]">
-                      <h4 className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-3 sm:mb-4">我的感悟</h4>
-                      <div className="text-gray-700 leading-relaxed whitespace-pre-wrap text-sm sm:text-base">
-                        {selectedQuote.comment || "暂无感悟..."}
-                      </div>
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted">My Thoughts</h4>
+                      <p className="text-accent/70 leading-relaxed text-lg whitespace-pre-wrap">
+                        {selectedQuote.comment || "No thoughts recorded yet..."}
+                      </p>
                     </div>
 
-                    <div className="pt-6 sm:pt-8 border-t border-[#e6e2d3] grid grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <h4 className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-1">分类</h4>
-                        <p className="text-xs sm:text-sm font-medium">{selectedQuote.category}</p>
+                    {selectedQuote.source_url && (
+                      <div className="space-y-4">
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted">Source</h4>
+                        <a 
+                          href={selectedQuote.source_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-blue-600 hover:underline font-medium"
+                        >
+                          <Globe size={16} />
+                          <span className="truncate">{selectedQuote.source_url}</span>
+                        </a>
                       </div>
-                      <div>
-                        <h4 className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#8e8e7e] mb-1">创建时间</h4>
-                        <p className="text-xs sm:text-sm font-medium">{new Date(selectedQuote.created_at).toLocaleDateString()}</p>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-6 pt-8 border-t border-border">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-muted uppercase tracking-widest">Category</p>
+                        <p className="font-bold">{selectedQuote.category}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-muted uppercase tracking-widest">Added on</p>
+                        <p className="font-bold">{new Date(selectedQuote.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
                   </div>
@@ -678,9 +788,99 @@ export default function App() {
             </motion.aside>
           )}
         </AnimatePresence>
+      </main>
+    </div>
+  );
+}
+
+function SidebarItem({ icon, label, active, onClick, isOpen, isSubItem }: { icon: React.ReactNode, label: string, active?: boolean, onClick?: () => void, isOpen: boolean, isSubItem?: boolean }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-3 p-3 rounded-2xl transition-all group",
+        active ? "bg-accent text-white shadow-lg" : "text-muted hover:text-accent hover:bg-app-bg",
+        isSubItem && "pl-4"
+      )}
+    >
+      <div className={cn("shrink-0", active ? "text-white" : "text-muted group-hover:text-accent")}>
+        {icon}
+      </div>
+      {isOpen && <span className="text-sm font-bold truncate">{label}</span>}
+    </button>
+  );
+}
+
+function NoteCard({ quote, state, onClick, onDelete, onBoost, onTogglePin }: { quote: Quote, state: any, onClick: () => void, onDelete: () => void, onBoost: () => void, onTogglePin: () => void }) {
+  return (
+    <motion.article 
+      layout
+      onClick={onClick}
+      className="group bg-white rounded-[32px] p-8 card-shadow hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col h-full border border-transparent hover:border-border relative overflow-hidden"
+    >
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-wrap gap-2">
+          <span className={cn("px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm", state.tagBg)}>
+            {state.label}
+          </span>
+          {quote.is_pinned && (
+            <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-1">
+              <Pin size={10} /> Pinned
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
+            className={cn(
+              "p-2 rounded-lg transition-colors",
+              quote.is_pinned ? "bg-amber-50 text-amber-600" : "hover:bg-app-bg text-muted hover:text-accent"
+            )}
+            title={quote.is_pinned ? "Unpin" : "Pin"}
+          >
+            {quote.is_pinned ? <Pin size={14} /> : <PinOff size={14} />}
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onBoost(); }}
+            className="p-2 hover:bg-emerald-50 text-muted hover:text-emerald-600 rounded-lg transition-colors"
+            title="Boost"
+          >
+            <RefreshCw size={14} />
+          </button>
+        </div>
       </div>
 
-      {/* Settings Modal Removed */}
-    </div>
+      <div className="flex-1 space-y-4">
+        <h4 className="text-2xl font-display font-black leading-tight group-hover:text-accent transition-colors">
+          {quote.title || "Untitled"}
+        </h4>
+        <p className="text-muted text-base line-clamp-4 leading-relaxed whitespace-pre-wrap">
+          {quote.content}
+        </p>
+      </div>
+
+      <div className="pt-8 mt-auto flex items-center justify-between border-t border-border/50">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <User size={12} className="text-muted" />
+            <span className="text-xs font-bold text-muted truncate max-w-[120px]">{quote.author}</span>
+          </div>
+          {quote.source_url && (
+            <div className="flex items-center gap-2 text-blue-500/60 text-[10px] font-medium">
+              <Globe size={10} />
+              <span className="truncate max-w-[120px]">Link attached</span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-3 text-muted">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="p-2 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+    </motion.article>
   );
 }
