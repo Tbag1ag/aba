@@ -228,23 +228,36 @@ class StorageService {
   async decayKnowledge(): Promise<void> {
     const now = new Date();
     if (this.sql) {
-      // Decay logic: -0.05 confidence for every 7 days of inactivity
+      // Decay logic: -0.01 confidence for every day of inactivity
+      // We update last_accessed_at to now to mark that decay has been applied up to this point
       await this.sql`
         UPDATE quotes 
-        SET confidence = GREATEST(0.0, confidence - 0.05)
-        WHERE (EXTRACT(EPOCH FROM (${now} - last_accessed_at)) / 86400) > 7
+        SET confidence = GREATEST(0.0, confidence - (0.01 * FLOOR(EXTRACT(EPOCH FROM (${now} - last_accessed_at)) / 86400))),
+            last_accessed_at = CASE 
+              WHEN FLOOR(EXTRACT(EPOCH FROM (${now} - last_accessed_at)) / 86400) >= 1 THEN ${now}
+              ELSE last_accessed_at
+            END
+        WHERE (EXTRACT(EPOCH FROM (${now} - last_accessed_at)) / 86400) >= 1
       `;
     } else {
       let quotes = await this.getLocalQuotes();
+      let changed = false;
       const updatedQuotes = quotes.map(q => {
         const lastAccess = new Date(q.last_accessed_at);
-        const diffDays = (now.getTime() - lastAccess.getTime()) / (1000 * 3600 * 24);
-        if (diffDays > 7) {
-          return { ...q, confidence: Math.max(0, q.confidence - 0.05) };
+        const diffDays = Math.floor((now.getTime() - lastAccess.getTime()) / (1000 * 3600 * 24));
+        if (diffDays >= 1) {
+          changed = true;
+          return { 
+            ...q, 
+            confidence: Math.max(0, q.confidence - (0.01 * diffDays)),
+            last_accessed_at: now.toISOString()
+          };
         }
         return q;
       });
-      localStorage.setItem('quotes', JSON.stringify(updatedQuotes));
+      if (changed) {
+        localStorage.setItem('quotes', JSON.stringify(updatedQuotes));
+      }
     }
   }
 

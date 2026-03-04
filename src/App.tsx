@@ -56,11 +56,16 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "confidence">("newest");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
+  const itemsPerPage = 9;
   const [heroQuoteId, setHeroQuoteId] = useState<number | null>(() => {
     const saved = localStorage.getItem('heroQuoteId');
     return saved ? parseInt(saved) : null;
   });
+  const [userProfile, setUserProfile] = useState(() => {
+    const saved = localStorage.getItem('userProfile');
+    return saved ? JSON.parse(saved) : { name: "Tbag", bio: "Student", avatar: "https://picsum.photos/seed/user/100/100" };
+  });
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [newQuote, setNewQuote] = useState({ title: "", content: "", author: "", comment: "", category: "未分类", source_url: "", is_pinned: false });
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -253,11 +258,12 @@ export default function App() {
   };
 
   const getKnowledgeState = (confidence: number) => {
-    if (confidence <= 0) return { icon: <Archive size={14} />, label: "土壤", color: "text-stone-600", bg: "bg-stone-100", cardBg: "bg-white", tagBg: "bg-stone-100 text-stone-600" };
-    if (confidence < 0.3) return { icon: <Wind size={14} />, label: "枯叶", color: "text-orange-600", bg: "bg-orange-50", cardBg: "bg-white", tagBg: "bg-orange-50 text-orange-600" };
-    if (confidence < 0.7) return { icon: <Wind size={14} />, label: "黄叶", color: "text-amber-600", bg: "bg-amber-50", cardBg: "bg-white", tagBg: "bg-amber-50 text-amber-600" };
-    if (confidence < 0.8) return { icon: <Sprout size={14} />, label: "萌芽", color: "text-lime-600", bg: "bg-lime-50", cardBg: "bg-white", tagBg: "bg-lime-50 text-lime-600" };
-    return { icon: <Leaf size={14} />, label: "绿叶", color: "text-emerald-600", bg: "bg-emerald-50", cardBg: "bg-white", tagBg: "bg-emerald-50 text-emerald-600" };
+    const pct = Math.round(confidence * 100);
+    if (confidence <= 0) return { icon: <Archive size={14} />, label: `土壤 ${pct}%`, color: "text-stone-600", bg: "bg-stone-100", cardBg: "bg-stone-50/30", tagBg: "bg-stone-100 text-stone-600" };
+    if (confidence < 0.3) return { icon: <Wind size={14} />, label: `枯叶 ${pct}%`, color: "text-orange-600", bg: "bg-orange-50", cardBg: "bg-orange-50/30", tagBg: "bg-orange-50 text-orange-600" };
+    if (confidence < 0.7) return { icon: <Wind size={14} />, label: `黄叶 ${pct}%`, color: "text-amber-600", bg: "bg-amber-50", cardBg: "bg-amber-50/30", tagBg: "bg-amber-50 text-amber-600" };
+    if (confidence < 0.8) return { icon: <Sprout size={14} />, label: `萌芽 ${pct}%`, color: "text-lime-600", bg: "bg-lime-50", cardBg: "bg-lime-50/30", tagBg: "bg-lime-50 text-lime-600" };
+    return { icon: <Leaf size={14} />, label: `绿叶 ${pct}%`, color: "text-emerald-600", bg: "bg-emerald-50", cardBg: "bg-emerald-50/30", tagBg: "bg-emerald-50 text-emerald-600" };
   };
 
   const handleUpdate = async (id: number) => {
@@ -308,14 +314,17 @@ export default function App() {
         </div>
 
         <div className="px-4 mb-8">
-          <div className="flex items-center gap-3 p-3 rounded-2xl hover:bg-app-bg transition-colors cursor-pointer group">
+          <div 
+            onClick={() => { setIsEditingProfile(true); setSelectedQuoteId(null); }}
+            className="flex items-center gap-3 p-3 rounded-2xl hover:bg-app-bg transition-colors cursor-pointer group"
+          >
             <div className="w-12 h-12 rounded-full overflow-hidden bg-muted/20 shrink-0">
-              <img src="https://picsum.photos/seed/user/100/100" alt="User" referrerPolicy="no-referrer" />
+              <img src={userProfile.avatar} alt="User" referrerPolicy="no-referrer" />
             </div>
             {isSidebarOpen && (
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-sm truncate">Tbag</h3>
-                <p className="text-muted text-xs">Student</p>
+                <h3 className="font-bold text-sm truncate">{userProfile.name}</h3>
+                <p className="text-muted text-xs">{userProfile.bio}</p>
               </div>
             )}
           </div>
@@ -416,23 +425,23 @@ export default function App() {
               <>
                 {/* Hero Section */}
                 {!searchQuery && selectedCategory === "全部" && heroQuote && (
-                  <section className="relative bg-white rounded-[32px] md:rounded-[40px] p-6 md:p-12 overflow-hidden card-shadow group border-2 border-accent/5">
-                    <div className="relative z-10 max-w-2xl space-y-4 md:space-y-6">
+                  <section className="relative bg-white rounded-[32px] md:rounded-[40px] p-6 md:py-8 md:px-12 overflow-hidden card-shadow group border-2 border-accent/5">
+                    <div className="relative z-10 max-w-2xl space-y-3 md:space-y-4">
                       <div className="flex gap-2">
                         <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider">Featured</span>
                       </div>
-                      <div className="space-y-2 md:space-y-4">
-                        <h2 className="text-3xl md:text-6xl font-display font-black leading-tight text-accent">
+                      <div className="space-y-1 md:space-y-2">
+                        <h2 className="text-3xl md:text-5xl font-display font-black leading-tight text-accent">
                           {heroQuote.title || "Untitled Note"}
                         </h2>
-                        <p className="text-muted text-base md:text-xl line-clamp-3 leading-relaxed whitespace-pre-wrap">
+                        <p className="text-muted text-base md:text-lg line-clamp-2 leading-relaxed whitespace-pre-wrap">
                           {heroQuote.content}
                         </p>
                       </div>
-                      <div className="flex items-center gap-4 pt-2 md:pt-4">
+                      <div className="flex items-center gap-4 pt-1 md:pt-2">
                         <button 
                           onClick={() => setSelectedQuoteId(heroQuote.id)}
-                          className="bg-accent text-white px-6 py-3 md:px-10 md:py-5 rounded-xl md:rounded-2xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xl text-sm md:text-base"
+                          className="bg-accent text-white px-6 py-2.5 md:px-8 md:py-3.5 rounded-xl md:rounded-2xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xl text-sm"
                         >
                           Read Note
                         </button>
@@ -676,7 +685,105 @@ export default function App() {
           )}
         </AnimatePresence>
 
+        {/* Profile Details Sidebar */}
+        <AnimatePresence>
+          {isEditingProfile && (
+            <motion.aside
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-50 flex flex-col border-l border-border"
+            >
+              <div className="p-6 border-b border-border flex justify-between items-center sticky top-0 bg-white/80 backdrop-blur-md z-10">
+                <h2 className="font-display font-bold text-lg">Edit Profile</h2>
+                <button onClick={() => setIsEditingProfile(false)} className="p-2 hover:bg-app-bg rounded-xl transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar">
+                <div className="flex flex-col items-center gap-6">
+                  <div className="relative group">
+                    <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-app-bg shadow-xl">
+                      <img src={userProfile.avatar} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    </div>
+                    <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                      <Plus size={24} />
+                      <input 
+                        type="text" 
+                        placeholder="Avatar URL"
+                        className="hidden"
+                        onChange={(e) => {
+                          const url = prompt("Enter Avatar URL:");
+                          if (url) {
+                            const updated = { ...userProfile, avatar: url };
+                            setUserProfile(updated);
+                            localStorage.setItem('userProfile', JSON.stringify(updated));
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const url = prompt("Enter Avatar URL:", userProfile.avatar);
+                      if (url) {
+                        const updated = { ...userProfile, avatar: url };
+                        setUserProfile(updated);
+                        localStorage.setItem('userProfile', JSON.stringify(updated));
+                      }
+                    }}
+                    className="text-xs font-bold text-accent hover:underline"
+                  >
+                    Change Avatar URL
+                  </button>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Name</label>
+                    <input 
+                      type="text" 
+                      value={userProfile.name} 
+                      onChange={e => {
+                        const updated = { ...userProfile, name: e.target.value };
+                        setUserProfile(updated);
+                        localStorage.setItem('userProfile', JSON.stringify(updated));
+                      }}
+                      className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm font-bold outline-none"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Bio / Role</label>
+                    <input 
+                      type="text" 
+                      value={userProfile.bio} 
+                      onChange={e => {
+                        const updated = { ...userProfile, bio: e.target.value };
+                        setUserProfile(updated);
+                        localStorage.setItem('userProfile', JSON.stringify(updated));
+                      }}
+                      className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-8 border-t border-border">
+                  <button 
+                    onClick={() => setIsEditingProfile(false)}
+                    className="w-full bg-accent text-white py-4 rounded-2xl font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
         {/* Details Sidebar */}
+
         <AnimatePresence>
           {selectedQuoteId && selectedQuote && (
             <motion.aside
@@ -793,7 +900,7 @@ export default function App() {
                   <div className="space-y-6 md:space-y-8">
                     <div className="space-y-4">
                       <h3 className="text-2xl md:text-3xl font-display font-bold leading-tight">{selectedQuote.title}</h3>
-                      <div className="bg-app-bg p-6 md:p-8 rounded-[24px] md:rounded-[32px] text-base md:text-lg leading-relaxed text-accent/80 whitespace-pre-wrap italic">
+                      <div className="bg-app-bg p-6 md:p-8 rounded-[24px] md:rounded-[32px] text-base md:text-lg leading-relaxed text-accent/80 whitespace-pre-wrap">
                         "{selectedQuote.content}"
                       </div>
                       <div className="flex items-center gap-3 text-muted">
@@ -868,7 +975,10 @@ function NoteCard({ quote, state, onClick, onDelete, onBoost, onTogglePin }: { q
     <motion.article 
       layout
       onClick={onClick}
-      className="group bg-white rounded-[24px] md:rounded-[32px] p-6 md:p-8 card-shadow hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col h-full border border-transparent hover:border-border relative overflow-hidden"
+      className={cn(
+        "group rounded-[24px] md:rounded-[32px] p-6 md:p-8 card-shadow hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col h-full border border-transparent hover:border-border relative overflow-hidden",
+        state.cardBg
+      )}
     >
       <div className="flex items-center justify-between mb-4 md:mb-6">
         <div className="flex flex-wrap gap-2">
