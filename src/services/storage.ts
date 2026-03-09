@@ -55,11 +55,17 @@ class StorageService {
   async getCategories(): Promise<Category[]> {
     if (this.sql) {
       try {
-        const result = await this.sql`SELECT * FROM categories ORDER BY name ASC`;
+        const result = await this.sql`SELECT * FROM categories ORDER BY sort_order ASC, name ASC`;
         return result as Category[];
       } catch (err) {
-        console.error("Neon fetch categories error:", err);
-        return this.getLocalCategories();
+        // If sort_order doesn't exist yet, fallback to name
+        try {
+          const result = await this.sql`SELECT * FROM categories ORDER BY name ASC`;
+          return result as Category[];
+        } catch (e) {
+          console.error("Neon fetch categories error:", e);
+          return this.getLocalCategories();
+        }
       }
     }
     return this.getLocalCategories();
@@ -69,10 +75,10 @@ class StorageService {
     const data = localStorage.getItem('categories');
     if (!data) {
       const defaults = [
-        { id: 1, name: '读书心得' },
-        { id: 2, name: '金句摘抄' },
-        { id: 3, name: '灵感随笔' },
-        { id: 4, name: '未分类' }
+        { id: 1, name: '读书心得', sort_order: 0 },
+        { id: 2, name: '金句摘抄', sort_order: 1 },
+        { id: 3, name: '灵感随笔', sort_order: 2 },
+        { id: 4, name: '未分类', sort_order: 3 }
       ];
       localStorage.setItem('categories', JSON.stringify(defaults));
       return defaults;
@@ -82,14 +88,32 @@ class StorageService {
 
   async addCategory(name: string): Promise<Category> {
     if (this.sql) {
-      const result = await this.sql`INSERT INTO categories (name) VALUES (${name}) RETURNING *`;
+      const maxOrder = await this.sql`SELECT MAX(sort_order) as max_order FROM categories`;
+      const nextOrder = (maxOrder[0].max_order || 0) + 1;
+      const result = await this.sql`INSERT INTO categories (name, sort_order) VALUES (${name}, ${nextOrder}) RETURNING *`;
       return result[0] as Category;
     }
     const categories = await this.getCategories();
-    const newCat = { id: Date.now(), name };
+    const nextOrder = categories.length > 0 ? Math.max(...categories.map(c => (c as any).sort_order || 0)) + 1 : 0;
+    const newCat = { id: Date.now(), name, sort_order: nextOrder };
     categories.push(newCat);
     localStorage.setItem('categories', JSON.stringify(categories));
     return newCat;
+  }
+
+  async reorderCategories(orderedIds: number[]): Promise<void> {
+    if (this.sql) {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await this.sql`UPDATE categories SET sort_order = ${i} WHERE id = ${orderedIds[i]}`;
+      }
+      return;
+    }
+    const categories = await this.getCategories();
+    const reordered = orderedIds.map((id, index) => {
+      const cat = categories.find(c => c.id === id);
+      return cat ? { ...cat, sort_order: index } : null;
+    }).filter(Boolean) as Category[];
+    localStorage.setItem('categories', JSON.stringify(reordered));
   }
 
   async deleteCategory(id: number): Promise<void> {

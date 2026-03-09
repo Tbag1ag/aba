@@ -37,12 +37,30 @@ import {
   Calendar,
   LayoutGrid,
   Heart,
-  MessageCircle
+  MessageCircle,
+  GripVertical
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { storage, type Quote, type Category } from "./services/storage";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -80,6 +98,31 @@ export default function App() {
   const [isEditingSidebar, setIsEditingSidebar] = useState(false);
 
   const selectedQuote = quotes.find(q => q.id === selectedQuoteId);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = categories.findIndex((cat) => cat.id === active.id);
+      const newIndex = categories.findIndex((cat) => cat.id === over.id);
+
+      const newCategories = arrayMove(categories, oldIndex, newIndex);
+      setCategories(newCategories);
+      
+      try {
+        await storage.reorderCategories(newCategories.map(c => c.id));
+      } catch (err) {
+        console.error("Failed to save category order", err);
+      }
+    }
+  };
 
   const sortedQuotes = [...quotes].sort((a, b) => {
     // 1. Pinned notes always on top
@@ -334,25 +377,79 @@ export default function App() {
           <SidebarItem 
             icon={<LayoutGrid size={20} />} 
             label="Dashboard" 
-            active={currentView === "dashboard"} 
+            active={currentView === "dashboard" && selectedCategory === "全部"} 
             onClick={() => { setCurrentView("dashboard"); setSelectedCategory("全部"); }} 
             isOpen={isSidebarOpen} 
           />
           
           <div className="pt-4 pb-2">
-            {isSidebarOpen && <p className="px-4 text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Categories</p>}
+            <div className="flex items-center justify-between px-4 mb-2">
+              {isSidebarOpen && <p className="text-[10px] font-bold text-muted uppercase tracking-widest">Categories</p>}
+              {isSidebarOpen && (
+                <button 
+                  onClick={() => setIsManagingCategories(!isManagingCategories)}
+                  className="text-[10px] font-bold uppercase tracking-widest text-accent hover:underline"
+                >
+                  {isManagingCategories ? "Done" : "Manage"}
+                </button>
+              )}
+            </div>
+            
             <div className="space-y-1">
-              {categories.map(cat => (
-                <SidebarItem 
-                  key={cat.id} 
-                  icon={<Hash size={18} />} 
-                  label={cat.name} 
-                  active={currentView === "dashboard" && selectedCategory === cat.name} 
-                  onClick={() => { setCurrentView("dashboard"); setSelectedCategory(cat.name); }} 
-                  isOpen={isSidebarOpen}
-                  isSubItem
-                />
-              ))}
+              {isManagingCategories ? (
+                <div className="space-y-2">
+                  <form onSubmit={handleAddCategory} className="px-3 mb-4">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={newCategoryName}
+                        onChange={e => setNewCategoryName(e.target.value)}
+                        placeholder="New category..."
+                        className="w-full bg-app-bg border-none rounded-xl pl-3 pr-10 py-2 text-xs outline-none focus:ring-1 focus:ring-accent/10"
+                      />
+                      <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 text-accent">
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  </form>
+                  
+                  <DndContext 
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext 
+                      items={categories.map(c => c.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="space-y-1">
+                        {categories.map(cat => (
+                          <SortableCategoryItem 
+                            key={cat.id} 
+                            category={cat} 
+                            onDelete={() => handleDeleteCategory(cat.id, cat.name)}
+                            isOpen={isSidebarOpen}
+                          />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {categories.map(cat => (
+                    <SidebarItem 
+                      key={cat.id}
+                      icon={<Hash size={18} />} 
+                      label={cat.name} 
+                      active={currentView === "dashboard" && selectedCategory === cat.name} 
+                      onClick={() => { setCurrentView("dashboard"); setSelectedCategory(cat.name); }} 
+                      isOpen={isSidebarOpen}
+                      isSubItem
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -899,19 +996,25 @@ export default function App() {
                 ) : (
                   <div className="space-y-6 md:space-y-8">
                     <div className="space-y-4">
-                      <h3 className="text-2xl md:text-3xl font-display font-bold leading-tight">{selectedQuote.title}</h3>
-                      <div className="bg-app-bg p-6 md:p-8 rounded-[24px] md:rounded-[32px] text-base md:text-lg leading-relaxed text-accent/80 whitespace-pre-wrap">
-                        "{selectedQuote.content}"
+                      <h3 className="text-3xl md:text-4xl font-display font-bold leading-tight text-accent tracking-tight">{selectedQuote.title}</h3>
+                      <div className="bg-app-bg/50 p-8 md:p-10 rounded-[32px] md:rounded-[40px] text-lg md:text-xl leading-relaxed text-accent/90 whitespace-pre-wrap font-medium border border-accent/5 shadow-inner">
+                        {selectedQuote.content}
                       </div>
-                      <div className="flex items-center gap-3 text-muted">
-                        <User size={16} />
-                        <span className="font-bold text-sm md:text-base">{selectedQuote.author}</span>
+                      <div className="flex items-center gap-3 text-muted px-2">
+                        <div className="w-8 h-8 rounded-full bg-accent/5 flex items-center justify-center">
+                          <User size={16} className="text-accent/40" />
+                        </div>
+                        <span className="font-bold text-sm md:text-base tracking-wide">{selectedQuote.author}</span>
                       </div>
                     </div>
                     
-                    <div className="space-y-3 md:space-y-4">
-                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted">My Thoughts</h4>
-                      <p className="text-accent/70 leading-relaxed text-base md:text-lg whitespace-pre-wrap">
+                    <div className="space-y-4 md:space-y-6 px-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-px flex-1 bg-border/50"></div>
+                        <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted/60">My Thoughts</h4>
+                        <div className="h-px flex-1 bg-border/50"></div>
+                      </div>
+                      <p className="text-accent/70 leading-relaxed text-lg md:text-xl whitespace-pre-wrap font-normal">
                         {selectedQuote.comment || "No thoughts recorded yet..."}
                       </p>
                     </div>
@@ -948,6 +1051,52 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+    </div>
+  );
+}
+
+function SortableCategoryItem({ category, onDelete, isOpen }: { category: Category, onDelete: () => void, isOpen: boolean }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: category.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 1,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style}
+      className="flex items-center gap-2 p-2 rounded-xl hover:bg-app-bg group transition-colors"
+    >
+      <button 
+        {...attributes} 
+        {...listeners}
+        className="text-muted hover:text-accent cursor-grab active:cursor-grabbing"
+      >
+        <GripVertical size={16} />
+      </button>
+      <div className="flex-1 flex items-center gap-2 min-w-0">
+        <Hash size={14} className="text-muted shrink-0" />
+        <span className="text-xs font-bold truncate">{category.name}</span>
+      </div>
+      {category.name !== "未分类" && (
+        <button 
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="p-1 text-muted hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
     </div>
   );
 }
