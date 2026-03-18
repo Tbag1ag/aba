@@ -1,0 +1,5 @@
+[functions]
+  directory = "netlify/functions"
+
+[functions."feishu-daily"]
+  schedule = "0 4 * * *"
