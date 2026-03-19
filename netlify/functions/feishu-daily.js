@@ -18,11 +18,7 @@ exports.handler = async (event, context) => {
 
     const quote = rows[0];
 
-    // 2. 构建内容片段
-    const contentText = quote.content.length > 300
-      ? quote.content.slice(0, 300) + '...'
-      : quote.content;
-
+    // 2. 构建内容 — 不截断，保留完整原文
     const titleText = quote.title || '无标题';
     const categoryText = quote.category || '未分类';
     const dateText = new Date(quote.created_at).toLocaleDateString('zh-CN');
@@ -32,9 +28,12 @@ exports.handler = async (event, context) => {
       {
         tag: 'div',
         text: {
-          content: contentText,
+          content: quote.content,
           tag: 'lark_md'
         }
+      },
+      {
+        tag: 'hr'
       },
       {
         tag: 'div',
@@ -70,26 +69,34 @@ exports.handler = async (event, context) => {
             },
             type: 'default',
             url: quote.source_url
+          },
+          {
+            tag: 'button',
+            text: {
+              content: '在 ReadNote 中查看',
+              tag: 'plain_text'
+            },
+            type: 'primary',
+            url: `https://readbo.netlify.app/?id=${quote.id}`
+          }
+        ]
+      });
+    } else {
+      cardElements.push({
+        tag: 'action',
+        actions: [
+          {
+            tag: 'button',
+            text: {
+              content: '在 ReadNote 中查看',
+              tag: 'plain_text'
+            },
+            type: 'primary',
+            url: `https://readbo.netlify.app/?id=${quote.id}`
           }
         ]
       });
     }
-
-    // 跳转 ReadNote 网站的按钮
-    cardElements.push({
-      tag: 'action',
-      actions: [
-        {
-          tag: 'button',
-          text: {
-            content: '打开 ReadNote',
-            tag: 'plain_text'
-          },
-          type: 'primary',
-          url: 'https://readbo.netlify.app'
-        }
-      ]
-    });
 
     const feishuPayload = {
       msg_type: 'interactive',
