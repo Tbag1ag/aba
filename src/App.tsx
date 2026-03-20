@@ -150,22 +150,6 @@ export default function App() {
     }
   }, [selectedQuoteId, isEditingSidebar]);
 
-  // URL 参数定位：支持 ?id=123 直接打开对应笔记
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const targetId = params.get('id');
-    if (targetId) {
-      const numId = parseInt(targetId);
-      if (!isNaN(numId)) {
-        // 先切到"全部"分类，确保笔记不会被分类筛选挡住
-        setSelectedCategory("全部");
-        setSelectedQuoteId(numId);
-        // 清除 URL 参数，避免刷新后重复触发
-        window.history.replaceState({}, '', window.location.pathname);
-      }
-    }
-  }, []);
-
   useEffect(() => {
     const initGarden = async () => {
       setIsLoading(true);
