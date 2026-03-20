@@ -38,7 +38,9 @@ import {
   LayoutGrid,
   Heart,
   MessageCircle,
-  GripVertical
+  GripVertical,
+  Copy,
+  Check
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { clsx, type ClassValue } from "clsx";
@@ -96,6 +98,7 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isEditingSidebar, setIsEditingSidebar] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
 
   const selectedQuote = quotes.find(q => q.id === selectedQuoteId);
 
@@ -883,171 +886,187 @@ export default function App() {
 
         <AnimatePresence>
           {selectedQuoteId && selectedQuote && (
+            <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+              onClick={() => { setSelectedQuoteId(null); setIsEditingSidebar(false); }}
+            />
             <motion.aside
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-50 flex flex-col border-l border-border"
+              className="fixed inset-0 m-auto w-[90vw] max-w-[640px] h-[85vh] max-h-[800px] bg-white shadow-2xl z-50 flex flex-col rounded-3xl border border-border overflow-hidden"
             >
-              <div className="p-6 border-b border-border flex justify-between items-center sticky top-0 bg-white/80 backdrop-blur-md z-10">
-                <div className="flex items-center gap-3">
-                  <h2 className="font-display font-bold text-lg">Note Details</h2>
+              {/* Top bar - minimal */}
+              <div className="flex items-center justify-between px-6 py-4 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted/80 font-medium">{selectedQuote.category}</span>
+                  <span className="text-muted/30">·</span>
+                  <span className="text-xs text-muted/60">{new Date(selectedQuote.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                </div>
+                <div className="flex items-center gap-1">
                   {isEditingSidebar ? (
-                    <button onClick={() => handleUpdate(selectedQuote.id)} className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 text-xs font-bold bg-emerald-50 px-3 py-1 rounded-full">
-                      <Save size={14} /> Save
+                    <button onClick={() => handleUpdate(selectedQuote.id)} className="text-white bg-accent hover:bg-accent/90 flex items-center gap-1.5 text-xs font-medium px-4 py-1.5 rounded-full transition-colors">
+                      <Save size={13} /> 保存
                     </button>
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setIsEditingSidebar(true)} className="text-muted hover:text-accent flex items-center gap-1 text-xs font-bold bg-app-bg px-3 py-1 rounded-full transition-colors">
-                        <Edit3 size={14} /> Edit
+                    <>
+                      <button
+                        onClick={() => {
+                          const text = [selectedQuote.title, selectedQuote.content, selectedQuote.author ? `— ${selectedQuote.author}` : ''].filter(Boolean).join('\n\n');
+                          navigator.clipboard.writeText(text);
+                          setIsCopied(true);
+                          setTimeout(() => setIsCopied(false), 1500);
+                        }}
+                        className="text-muted/70 hover:text-accent hover:bg-app-bg flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-colors"
+                      >
+                        {isCopied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
                       </button>
-                      <button 
-                        onClick={() => handleSetHero(selectedQuote.id)} 
+                      <button onClick={() => setIsEditingSidebar(true)} className="text-muted/70 hover:text-accent hover:bg-app-bg flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-colors">
+                        <Edit3 size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleSetHero(selectedQuote.id)}
                         className={cn(
-                          "flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full transition-colors",
-                          heroQuoteId === selectedQuote.id ? "bg-accent text-white" : "bg-app-bg text-muted hover:text-accent"
+                          "flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-colors",
+                          heroQuoteId === selectedQuote.id ? "bg-accent text-white" : "text-muted/70 hover:text-accent hover:bg-app-bg"
                         )}
                       >
-                        <LayoutGrid size={14} /> {heroQuoteId === selectedQuote.id ? "Featured" : "Set as Hero"}
+                        <LayoutGrid size={13} />
                       </button>
-                    </div>
+                    </>
                   )}
+                  <button onClick={() => { setSelectedQuoteId(null); setIsEditingSidebar(false); }} className="text-muted/50 hover:text-accent hover:bg-app-bg p-1.5 rounded-full transition-colors ml-1">
+                    <X size={16} />
+                  </button>
                 </div>
-                <button onClick={() => { setSelectedQuoteId(null); setIsEditingSidebar(false); }} className="p-2 hover:bg-app-bg rounded-xl transition-colors">
-                  <X size={20} />
-                </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 md:space-y-8 custom-scrollbar">
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto px-8 md:px-10 pb-8 custom-scrollbar">
                 {isEditingSidebar ? (
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Title</label>
-                      <input 
-                        type="text" 
-                        value={editForm.title} 
+                  <div className="space-y-5">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-muted/60 ml-1">标题</label>
+                      <input
+                        type="text"
+                        value={editForm.title}
                         onChange={e => setEditForm({ ...editForm, title: e.target.value })}
-                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm font-bold outline-none"
+                        className="w-full bg-app-bg/70 border border-border/50 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-accent/20 focus:bg-white transition-colors"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Content</label>
-                      <textarea 
-                        value={editForm.content} 
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-muted/60 ml-1">内容</label>
+                      <textarea
+                        value={editForm.content}
                         onChange={e => setEditForm({ ...editForm, content: e.target.value })}
-                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm leading-relaxed min-h-[150px] md:min-h-[200px] outline-none"
+                        className="w-full bg-app-bg/70 border border-border/50 rounded-xl px-4 py-3 text-sm leading-relaxed min-h-[180px] outline-none focus:border-accent/20 focus:bg-white transition-colors resize-none"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Author</label>
-                      <input 
-                        type="text" 
-                        value={editForm.author} 
-                        onChange={e => setEditForm({ ...editForm, author: e.target.value })}
-                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm outline-none"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">My Thoughts</label>
-                      <textarea 
-                        value={editForm.comment} 
-                        onChange={e => setEditForm({ ...editForm, comment: e.target.value })}
-                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm min-h-[100px] md:min-h-[120px] outline-none"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Source URL</label>
-                      <input 
-                        type="text" 
-                        value={editForm.source_url} 
-                        onChange={e => setEditForm({ ...editForm, source_url: e.target.value })}
-                        className="w-full bg-app-bg border-none rounded-2xl p-4 text-sm outline-none"
-                        placeholder="https://..."
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Category</label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted/60 ml-1">作者</label>
+                        <input
+                          type="text"
+                          value={editForm.author}
+                          onChange={e => setEditForm({ ...editForm, author: e.target.value })}
+                          className="w-full bg-app-bg/70 border border-border/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-accent/20 focus:bg-white transition-colors"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted/60 ml-1">分类</label>
                         <select
                           value={editForm.category}
                           onChange={e => setEditForm({ ...editForm, category: e.target.value })}
-                          className="w-full bg-app-bg border-none rounded-2xl px-4 py-3 text-sm outline-none appearance-none"
+                          className="w-full bg-app-bg/70 border border-border/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-accent/20 focus:bg-white transition-colors appearance-none"
                         >
                           {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
                         </select>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-muted tracking-widest ml-1">Pin Status</label>
-                        <button
-                          type="button"
-                          onClick={() => setEditForm({ ...editForm, is_pinned: !editForm.is_pinned })}
-                          className={cn(
-                            "w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold transition-all",
-                            editForm.is_pinned ? "bg-amber-100 text-amber-600" : "bg-app-bg text-muted"
-                          )}
-                        >
-                          {editForm.is_pinned ? <Pin size={14} /> : <PinOff size={14} />}
-                          {editForm.is_pinned ? "Pinned" : "Not Pinned"}
-                        </button>
-                      </div>
                     </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-muted/60 ml-1">我的感悟</label>
+                      <textarea
+                        value={editForm.comment}
+                        onChange={e => setEditForm({ ...editForm, comment: e.target.value })}
+                        className="w-full bg-app-bg/70 border border-border/50 rounded-xl px-4 py-3 text-sm min-h-[100px] outline-none focus:border-accent/20 focus:bg-white transition-colors resize-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-muted/60 ml-1">来源链接</label>
+                      <input
+                        type="text"
+                        value={editForm.source_url}
+                        onChange={e => setEditForm({ ...editForm, source_url: e.target.value })}
+                        className="w-full bg-app-bg/70 border border-border/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-accent/20 focus:bg-white transition-colors"
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, is_pinned: !editForm.is_pinned })}
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all",
+                        editForm.is_pinned ? "bg-amber-50 text-amber-600 border border-amber-200" : "bg-app-bg/70 text-muted border border-border/50"
+                      )}
+                    >
+                      {editForm.is_pinned ? <Pin size={14} /> : <PinOff size={14} />}
+                      {editForm.is_pinned ? "已置顶" : "未置顶"}
+                    </button>
                   </div>
                 ) : (
-                  <div className="space-y-6 md:space-y-8">
-                    <div className="space-y-4">
-                      <h3 className="text-3xl md:text-4xl font-display font-bold leading-tight text-accent tracking-tight">{selectedQuote.title}</h3>
-                      <div className="bg-app-bg/50 p-8 md:p-10 rounded-[32px] md:rounded-[40px] text-lg md:text-xl leading-relaxed text-accent/90 whitespace-pre-wrap font-medium border border-accent/5 shadow-inner">
-                        {selectedQuote.content}
-                      </div>
-                      <div className="flex items-center gap-3 text-muted px-2">
-                        <div className="w-8 h-8 rounded-full bg-accent/5 flex items-center justify-center">
-                          <User size={16} className="text-accent/40" />
-                        </div>
-                        <span className="font-bold text-sm md:text-base tracking-wide">{selectedQuote.author}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-4 md:space-y-6 px-2">
-                      <div className="flex items-center gap-2">
-                        <div className="h-px flex-1 bg-border/50"></div>
-                        <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted/60">My Thoughts</h4>
-                        <div className="h-px flex-1 bg-border/50"></div>
-                      </div>
-                      <p className="text-accent/70 leading-relaxed text-lg md:text-xl whitespace-pre-wrap font-normal">
-                        {selectedQuote.comment || "No thoughts recorded yet..."}
-                      </p>
-                    </div>
+                  <div className="space-y-6">
+                    {/* Title */}
+                    {selectedQuote.title && (
+                      <h3 className="text-2xl font-display font-bold leading-snug text-accent">{selectedQuote.title}</h3>
+                    )}
 
-                    {selectedQuote.source_url && (
-                      <div className="space-y-3 md:space-y-4">
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted">Source</h4>
-                        <a 
-                          href={selectedQuote.source_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-blue-600 hover:underline font-medium text-sm md:text-base"
-                        >
-                          <Globe size={16} />
-                          <span className="truncate">{selectedQuote.source_url}</span>
-                        </a>
+                    {/* Author */}
+                    {selectedQuote.author && (
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent/10 to-accent/5 flex items-center justify-center">
+                          <User size={12} className="text-accent/50" />
+                        </div>
+                        <span className="text-sm text-muted/80 font-medium">{selectedQuote.author}</span>
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4 md:gap-6 pt-6 md:pt-8 border-t border-border">
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-bold text-muted uppercase tracking-widest">Category</p>
-                        <p className="font-bold text-sm md:text-base">{selectedQuote.category}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-bold text-muted uppercase tracking-widest">Added on</p>
-                        <p className="font-bold text-sm md:text-base">{new Date(selectedQuote.created_at).toLocaleDateString()}</p>
-                      </div>
+                    {/* Main content */}
+                    <div className="text-[15px] leading-[1.8] text-accent/85 whitespace-pre-wrap">
+                      {selectedQuote.content}
                     </div>
+
+                    {/* Thoughts */}
+                    {selectedQuote.comment && (
+                      <div className="border-l-2 border-accent/10 pl-5 py-1">
+                        <p className="text-[13px] text-muted/70 leading-relaxed whitespace-pre-wrap italic">
+                          {selectedQuote.comment}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Source */}
+                    {selectedQuote.source_url && (
+                      <a
+                        href={selectedQuote.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-xs text-muted/60 hover:text-accent bg-app-bg/60 px-3 py-2 rounded-lg transition-colors"
+                      >
+                        <Globe size={13} />
+                        <span className="truncate max-w-[300px]">{selectedQuote.source_url}</span>
+                      </a>
+                    )}
                   </div>
                 )}
               </div>
             </motion.aside>
+            </>
           )}
         </AnimatePresence>
       </main>
